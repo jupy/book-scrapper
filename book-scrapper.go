@@ -17,6 +17,12 @@ import (
 	"github.com/gocolly/colly"
 )
 
+type Person struct {
+	FirstName  string
+	MiddleName string
+	LastName   string
+}
+
 type Book struct {
 	Type         string
 	FileName     string
@@ -25,10 +31,13 @@ type Book struct {
 	PosterUrl    string
 	Year         string
 	Genres       []string
-	Authors      []string
+	Authors      []Person
+	Painters     []Person
+	Editors      []Person
 	Countries    []string
-	Publisher    []string
+	Publisher    string
 	Summary      string
+	LabirintUrl  string
 	GoodreadsUrl string
 	FlibustaUrl  string
 	LitresUrl    string
@@ -42,12 +51,20 @@ func (book *Book) Print() {
 		fmt.Printf("Genre:          %s\n", a)
 	}
 	for _, d := range book.Authors {
-		fmt.Printf("Author:       %s\n", d)
+		fmt.Printf("Author:       %s, %s\n", d.LastName, d.FirstName)
+	}
+	for _, d := range book.Painters {
+		fmt.Printf("Painter:      %s, %s\n", d.LastName, d.FirstName)
+	}
+	for _, d := range book.Editors {
+		fmt.Printf("Editor:       %s, %s\n", d.LastName, d.FirstName)
 	}
 	fmt.Printf("Publisher:      %s\n", book.Publisher)
 	for _, c := range book.Countries {
 		fmt.Printf("Country:        %s\n", c)
 	}
+
+	fmt.Printf("Labirint:       %s\n", book.LabirintUrl)
 	fmt.Printf("Goodreads:      %s\n", book.GoodreadsUrl)
 	fmt.Printf("Flibusta:       %s\n", book.FlibustaUrl)
 	fmt.Printf("Litres:         %s\n", book.LitresUrl)
@@ -104,6 +121,28 @@ func PrintList(w *bufio.Writer, title string, lst []string) {
 	check(err)
 }
 
+func PrintPersonsList(w *bufio.Writer, title string, lst []Person) {
+	if len(lst) == 0 {
+		return
+	}
+
+	_, err := fmt.Fprintf(w, title)
+	check(err)
+
+	text := ""
+	for _, person := range lst {
+		if len(text) > 0 {
+			text += ", "
+		}
+		text += "[[" + person.LastName + ", " + person.FirstName + "]]"
+	}
+
+	_, err = fmt.Fprintf(w, " %s", text)
+	check(err)
+	_, err = fmt.Fprintf(w, "\n")
+	check(err)
+}
+
 func (book *Book) PrintMarkdown() {
 	f, err := os.Create(book.FileName)
 	check(err)
@@ -138,12 +177,16 @@ func (book *Book) PrintMarkdown() {
 	_, err = fmt.Fprintf(w, "**rate:**\n")
 	check(err)
 
-	PrintList(w, "**author:**", book.Authors)
+	PrintPersonsList(w, "**author:**", book.Authors)
+	PrintPersonsList(w, "**painter:**", book.Painters)
+	PrintPersonsList(w, "**editor:**", book.Editors)
 	_, err = fmt.Fprintf(w, "**publisher:** [[%s]]]\n", book.Publisher)
 	check(err)
 	PrintList(w, "**country:**", book.Countries)
 	PrintList(w, "**tags:**", book.Genres)
 
+	_, err = fmt.Fprintf(w, "**[labirint](%s)**\n", book.LabirintUrl)
+	check(err)
 	_, err = fmt.Fprintf(w, "**[goodreads](%s)**\n", book.GoodreadsUrl)
 	check(err)
 	_, err = fmt.Fprintf(w, "**[flibusta](%s)**\n", book.FlibustaUrl)
@@ -201,6 +244,108 @@ func ParseList(html string) []string {
 	return list
 }
 
+func ParsePerson(str string) Person {
+	var person Person
+	v := strings.Split(str, " ")
+	if len(v) == 2 {
+		person.FirstName = v[1]
+		person.LastName = v[0]
+	}
+	if len(v) == 3 {
+		person.FirstName = v[1]
+		person.MiddleName = v[2]
+		person.LastName = v[0]
+	}
+	return person
+}
+
+func VisitLabirint(link string) Book {
+
+	var book Book
+
+	book.Type = "book"
+	book.LabirintUrl = link
+
+	fmt.Printf("Labirint: %s\n", link)
+
+	c := colly.NewCollector(
+		colly.AllowedDomains("www.labirint.ru"),
+	)
+
+	c.Limit(&colly.LimitRule{
+		DomainGlob:  "www.labirint.ru/books/*",
+		Delay:       1 * time.Second,
+		RandomDelay: 1 * time.Second,
+	})
+
+	c.OnHTML("#product-about h2", func(e *colly.HTMLElement) {
+		if book.Name == "" {
+			s := strings.TrimSpace(e.Text)
+			s = strings.TrimPrefix(s, "Аннотация к книге \"")
+			s = strings.TrimSuffix(s, "\"")
+			book.Name = s
+		}
+	})
+
+	c.OnHTML("#product-about p", func(e *colly.HTMLElement) {
+		if book.Summary == "" {
+			book.Summary = e.Text
+		}
+	})
+
+	/* 	c.OnHTML("#product-image img[src]", func(e *colly.HTMLElement) {
+		link := e.Attr("src")
+		book.PosterUrl, _ = url.QueryUnescape(link)
+	}) */
+	c.OnHTML("meta", func(e *colly.HTMLElement) {
+		if e.Attr("property") == "og:image" {
+			link := e.Attr("content")
+			book.PosterUrl, _ = url.QueryUnescape(link)
+		}
+	})
+
+	c.OnHTML(".authors", func(e *colly.HTMLElement) {
+		if strings.HasPrefix(e.Text, "Автор: ") {
+			s := strings.TrimPrefix(e.Text, "Автор: ")
+			book.Authors = append(book.Authors, ParsePerson(s))
+		}
+		if strings.HasPrefix(e.Text, "Художник: ") {
+			s := strings.TrimPrefix(e.Text, "Художник: ")
+			book.Painters = append(book.Painters, ParsePerson(s))
+		}
+		if strings.HasPrefix(e.Text, "Редактор: ") {
+			s := strings.TrimPrefix(e.Text, "Автор: ")
+			book.Editors = append(book.Editors, ParsePerson(s))
+		}
+	})
+
+	c.OnHTML(".publisher a", func(e *colly.HTMLElement) {
+		book.Publisher = e.Text
+	})
+
+	c.OnHTML(".publisher", func(e *colly.HTMLElement) {
+		r, _ := regexp.Compile("[0-9][0-9][0-9][0-9]")
+		book.Year = r.FindString(e.Text)
+	})
+
+	c.Visit(book.LabirintUrl)
+
+	var authors string
+	l := len(book.Authors)
+	if l > 0 {
+		authors = book.Authors[0].LastName + ", " + book.Authors[0].FirstName
+	}
+	if l == 2 {
+		authors += " и " + book.Authors[1].LastName + ", " + book.Authors[1].FirstName
+	}
+	if l > 2 {
+		authors += " и др."
+	}
+	book.FileName = authors + " - " + book.Name + ".md"
+
+	return book
+}
+
 func VisitGoodreads(link string) Book {
 
 	var book Book
@@ -224,131 +369,13 @@ func VisitGoodreads(link string) Book {
 		}
 	})
 
-	/* 	c.OnHTML(".infobox tbody tr:nth-child(2)", func(e *colly.HTMLElement) {
-	   		s := e.Text
-	   		s = strings.TrimPrefix(s, "англ.")
-	   		s = strings.TrimLeftFunc(s, func(r rune) bool {
-	   			return !unicode.IsLetter(r) && !unicode.IsNumber(r)
-	   		})
-	   		if strings.HasPrefix(s, "A") && unicode.IsSpace([]rune(s)[1]) {
-	   			s = s[1:]
-	   			s = strings.TrimLeftFunc(s, func(r rune) bool {
-	   				return !unicode.IsLetter(r) && !unicode.IsNumber(r)
-	   			})
-	   			s = s + ", A"
-	   		}
-	   		if strings.HasPrefix(s, "The") && unicode.IsSpace([]rune(s)[3]) {
-	   			s = s[3:]
-	   			s = strings.TrimLeftFunc(s, func(r rune) bool {
-	   				return !unicode.IsLetter(r) && !unicode.IsNumber(r)
-	   			})
-	   			s = s + ", The"
-	   		}
-	   		if book.InitName == "" {
-	   			book.InitName = strings.TrimSpace(s)
-	   		}
-	   	})
-
-	   	c.OnHTML(".infobox-image a img[srcset]", func(e *colly.HTMLElement) {
-	   		link := e.Attr("srcset")
-	   		decodedLink, _ := url.QueryUnescape(link)
-	   		v := strings.Split(decodedLink, " ")
-	   		if len(book.PosterUrl) == 0 {
-	   			book.PosterUrl = "https:" + v[0]
-	   		}
-	   	})
-
-	   	c.OnHTML(".infobox tbody tr", func(e *colly.HTMLElement) {
-	   		title := e.ChildText("th")
-	   		if title == "Жанр" {
-	   			e.ForEach("td a[href]", func(i int, a *colly.HTMLElement) {
-	   				if strings.HasPrefix(a.Text, "[") {
-	   					return
-	   				}
-	   				if a.Text == "экранизация" {
-	   					return
-	   				}
-	   				trans := Translations[a.Text]
-	   				if len(trans) == 0 {
-	   					fmt.Printf("can't translate: %s\n", a.Text)
-	   					book.Genres = append(book.Genres, a.Text)
-	   				} else {
-	   					book.Genres = append(book.Genres, trans+"|"+a.Text)
-	   				}
-	   			})
-	   		}
-	   		if title == "Сезонов" {
-	   			book.Type = "serial"
-	   		}
-	   		if title == "Режиссёр" {
-	   			e.ForEach("td span", func(i int, a *colly.HTMLElement) {
-	   				html, _ := a.DOM.Html()
-	   				book.Directors = ParseList(html)
-	   			})
-	   		}
-	   		if title == "Продюсер" {
-	   			e.ForEach("td span", func(i int, a *colly.HTMLElement) {
-	   				html, _ := a.DOM.Html()
-	   				book.Producers = ParseList(html)
-	   			})
-	   		}
-	   		if strings.Contains(title, "Автор") && strings.Contains(title, "сценария") {
-	   			e.ForEach("td span", func(i int, a *colly.HTMLElement) {
-	   				html, _ := a.DOM.Html()
-	   				book.Screenwriters = ParseList(html)
-	   			})
-	   		}
-	   		if title == "Кинокомпания" || title == "Студия" {
-	   			e.ForEach("td span", func(i int, a *colly.HTMLElement) {
-	   				html, _ := a.DOM.Html()
-	   				book.Companies = ParseList(html)
-	   			})
-	   		}
-	   		if title == "Страна" {
-	   			e.ForEach("td a", func(i int, a *colly.HTMLElement) {
-	   				if a.Text != "" {
-	   					trans := Translations[a.Text]
-	   					if len(trans) == 0 {
-	   						fmt.Printf("can't translate: %s\n", a.Text)
-	   						book.Countries = append(book.Countries, a.Text)
-	   					} else {
-	   						book.Countries = append(book.Countries, trans+"|"+a.Text)
-	   					}
-	   				}
-	   			})
-	   		}
-	   		if title == "Год" || title == "Премьера" {
-	   			r, _ := regexp.Compile("[0-9][0-9][0-9][0-9]")
-	   			e.ForEachWithBreak("td", func(i int, a *colly.HTMLElement) bool {
-	   				s := r.FindString(a.Text)
-	   				if s != "" {
-	   					book.Year = s
-	   					return false
-	   				}
-	   				return true
-	   			})
-	   		}
-	   		if title == "На экранах" {
-	   			r, _ := regexp.Compile("[0-9][0-9][0-9][0-9]")
-	   			e.ForEachWithBreak("td", func(i int, a *colly.HTMLElement) bool {
-	   				s := r.FindString(a.Text)
-	   				if s != "" {
-	   					book.Year = s
-	   					return false
-	   				}
-	   				return true
-	   			})
-	   		}
-	   	}) */
-
 	c.Visit(book.GoodreadsUrl)
 	return book
 }
 
-func VisitLitres(link string) (string, string) {
+func VisitLitres(link string) []string {
 
-	var summary string
-	var picture string
+	var tags []string
 
 	c := colly.NewCollector(
 		colly.AllowedDomains("litres.ru"),
@@ -360,8 +387,13 @@ func VisitLitres(link string) (string, string) {
 		RandomDelay: 1 * time.Second,
 	})
 
-	c.OnHTML("div.p-book-info__content p", func(e *colly.HTMLElement) {
-		summary = e.Text
+	//document.querySelector("#page-wrap > div.page > div:nth-child(2) > div > div.content_column.column > div > div.biblio_book_center.column > div.biblio_book_info > ul > li:nth-child(2) > a")
+	c.OnHTML("div.biblio_book_center", func(e *colly.HTMLElement) {
+		fmt.Printf("center: \n")
+		/* 		fmt.Printf("tag: %s\n", e.Text)
+		   		if e.Text != "#" {
+		   			tags = append(tags, e.Text)
+		   		} */
 	})
 
 	/* 	c.OnHTML("div.p-book-info img.p-picture__image[src]", func(e *colly.HTMLElement) {
@@ -369,7 +401,7 @@ func VisitLitres(link string) (string, string) {
 	}) */
 
 	c.Visit(link)
-	return summary, picture
+	return tags
 }
 
 func SearchGoogle(query string, site string) string {
@@ -393,7 +425,29 @@ func SearchGoogle(query string, site string) string {
 	return str
 }
 
-func ScrapeBookInner(goodreads string, flibusta string, litres string) Book {
+func SearchGoogle10(query string, site string) []string {
+	s := "-w " + site
+	out, err := exec.Command("googler", "-n 10", "--np", "--json", s, query).Output()
+	if err != nil {
+		log.Fatal(err)
+		panic(err)
+	}
+
+	var dat []map[string]interface{}
+
+	if err := json.Unmarshal(out, &dat); err != nil {
+		panic(err)
+	}
+
+	var urls []string
+	for _, d := range dat {
+		str, _ := url.QueryUnescape(d["url"].(string))
+		urls = append(urls, str)
+	}
+	return urls
+}
+
+/* func ScrapeBookInner(labirint []string, goodreads string, flibusta string, litres string) Book {
 	var book Book
 	var pic string
 
@@ -413,35 +467,71 @@ func ScrapeBookInner(goodreads string, flibusta string, litres string) Book {
 	}
 	book.FileName = name + " (" + book.Year + ").md"
 	return book
+} */
+
+func ScrapeBookInner(urls []string) []Book {
+	var books []Book
+
+	for _, w := range urls {
+		if strings.HasPrefix(w, "https://www.labirint.ru/books/") {
+			books = append(books, VisitLabirint(w))
+		}
+	}
+
+	/* 	name := strings.TrimSpace(book.InitName)
+	   	if name == "" {
+	   		name = book.Name
+	   	}
+	   	book.FileName = name + " (" + book.Year + ").md" */
+	return books
 }
 
-func ScrapeBook(query string) Book {
-	goodreads := SearchGoogle(query, "goodreads.com")
-	time.Sleep(1 * time.Second)
-	flibusta := SearchGoogle(query, "flibusta.is")
-	time.Sleep(1 * time.Second)
-	litres := SearchGoogle(query, "litres.ru")
-	time.Sleep(1 * time.Second)
+func ScrapeBook(query string) []Book {
+	labirint := SearchGoogle10(query, "labirint.ru/books")
+	/* 	time.Sleep(1 * time.Second)
+	   	goodreads := SearchGoogle(query, "goodreads.com")
+	   	time.Sleep(1 * time.Second)
+	   	flibusta := SearchGoogle(query, "flibusta.is")
+	   	time.Sleep(1 * time.Second)
+	   	litres := SearchGoogle(query, "litres.ru")
+	   	time.Sleep(1 * time.Second) */
 
-	fmt.Println(goodreads)
-	fmt.Println(flibusta)
-	fmt.Println(litres)
+	/* 	fmt.Println(goodreads)
+	   	fmt.Println(flibusta)
+	   	fmt.Println(litres) */
 
-	return ScrapeBookInner(goodreads, flibusta, litres)
+	/* return ScrapeBookInner(labirint, goodreads, flibusta, litres) */
+	return ScrapeBookInner(labirint)
 }
 
 func main() {
-	var book Book
+	/* 	var books []Book
 
-	reader := bufio.NewReader(os.Stdin)
-	book = ScrapeBook(os.Args[1])
-	book.Print()
-	fmt.Printf("=======\n")
-	fmt.Printf("Save markdown file \"" + book.FileName + "\"? (yes/no)> [yes]")
-	text, _ := reader.ReadString('\n')
-	text = strings.TrimSuffix(text, "\n")
-	if text == "" || text == "yes" {
-		book.PrintMarkdown()
-		fmt.Println("file \"" + book.FileName + "\" created")
-	}
+	   	reader := bufio.NewReader(os.Stdin)
+	   	query := os.Args[1]
+	   	books = ScrapeBook(query)
+	   	fmt.Printf("=======\n")
+	   	fmt.Printf("0. none \n")
+	   	for i, book := range books {
+	   		fmt.Printf("%d. \"%s\", publisher: %s [%s]\n", i+1, book.FileName, book.Publisher, book.Year)
+	   	}
+	   	text, _ := reader.ReadString('\n')
+	   	text = strings.TrimSuffix(text, "\n")
+	   	if text == "" {
+	   		text = "0"
+	   	}
+	   	i, _ := strconv.Atoi(text)
+	   	if i > 0 {
+	   		time.Sleep(1 * time.Second)
+	   		litres := SearchGoogle(query, "litres.ru")
+	   		fmt.Printf("Litres: %s\n", litres)
+	   		books[i-1].Genres = VisitLitres(litres)
+	   		fmt.Printf("Genres: %v\n", books[i-1].Genres)
+	   		books[i-1].PrintMarkdown()
+	   		fmt.Println("file \"" + books[i-1].FileName + "\" created")
+	   	} */
+	litres := SearchGoogle(os.Args[1], "litres.ru")
+	fmt.Printf("Litres: %s\n", litres)
+	genres := VisitLitres(litres)
+	fmt.Printf("Genres: %v\n", genres)
 }
