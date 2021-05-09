@@ -378,24 +378,38 @@ func VisitLitres(link string) []string {
 	var tags []string
 
 	c := colly.NewCollector(
-		colly.AllowedDomains("litres.ru"),
+		colly.AllowedDomains("www.litres.ru"),
 	)
 
 	c.Limit(&colly.LimitRule{
-		DomainGlob:  "litres.ru/*",
+		DomainGlob:  "www.litres.ru/*",
 		Delay:       1 * time.Second,
 		RandomDelay: 1 * time.Second,
 	})
 
 	//document.querySelector("#page-wrap > div.page > div:nth-child(2) > div > div.content_column.column > div > div.biblio_book_center.column > div.biblio_book_info > ul > li:nth-child(2) > a")
-	c.OnHTML("div.biblio_book_center", func(e *colly.HTMLElement) {
-		fmt.Printf("center: \n")
-		/* 		fmt.Printf("tag: %s\n", e.Text)
-		   		if e.Text != "#" {
-		   			tags = append(tags, e.Text)
-		   		} */
-	})
+	/* 	c.OnHTML("div.biblio_book_center", func(e *colly.HTMLElement) {
+		fmt.Printf("tag: %s\n", e.Text)
+		if e.Text != "#" {
+			tags = append(tags, e.Text)
+		}
+	}) */
 
+	/* 	c.OnHTML("html", func(e *colly.HTMLElement) {
+		fmt.Printf("tag: %s\n", e.Text)
+		if e.Text != "#" {
+			tags = append(tags, e.Text)
+		}
+	}) */
+
+	c.OnResponse(func(res *colly.Response) {
+		re, _ := regexp.Compile(`(?U)<div class="biblio_book_info">(.*)<\/div>`)
+		m := re.FindSubmatch([]byte(res.Body))
+		if m != nil {
+			s := strings.TrimSpace(string(m[1]))
+			fmt.Println("Parsed: ", s)
+		}
+	})
 	/* 	c.OnHTML("div.p-book-info img.p-picture__image[src]", func(e *colly.HTMLElement) {
 		picture = e.Attr("src")
 	}) */
