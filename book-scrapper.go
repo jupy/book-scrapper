@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -26,16 +27,19 @@ type Person struct {
 type Book struct {
 	Type         string
 	FileName     string
+	ShortName    string
 	Name         string
 	InitName     string
 	PosterUrl    string
 	Year         string
 	Genres       []string
+	Tags         []string
 	Authors      []Person
 	Painters     []Person
 	Editors      []Person
 	Countries    []string
 	Publisher    string
+	Isbn         string
 	Summary      string
 	LabirintUrl  string
 	GoodreadsUrl string
@@ -63,7 +67,11 @@ func (book *Book) Print() {
 	for _, c := range book.Countries {
 		fmt.Printf("Country:        %s\n", c)
 	}
+	for _, t := range book.Tags {
+		fmt.Printf("Tag:            %s\n", t)
+	}
 
+	fmt.Printf("ISBN:           %s\n", book.Isbn)
 	fmt.Printf("Labirint:       %s\n", book.LabirintUrl)
 	fmt.Printf("Goodreads:      %s\n", book.GoodreadsUrl)
 	fmt.Printf("Flibusta:       %s\n", book.FlibustaUrl)
@@ -79,24 +87,44 @@ func check(e error) {
 }
 
 var Translations = map[string]string{
-	"Канада":              "Canada",
-	"СССР":                "USSR",
-	"США":                 "USA",
-	"детектив":            "detective",
-	"драма":               "drama",
-	"комедия":             "comedy",
-	"мелодрама":           "melodrama",
-	"мультфильм":          "cartoon",
-	"мюзикл":              "musical",
-	"научная фантастика":  "science fiction",
-	"приключение":         "adventures",
-	"приключения":         "adventures",
-	"семейный":            "family",
-	"сказка":              "fairy tale",
-	"стимпанк":            "steampunk",
-	"фэнтези":             "fantasy",
-	"экранизация":         "film adaptation",
-	"юридический триллер": "legal thriller",
+	"Канада":  "Canada",
+	"СССР":    "USSR",
+	"США":     "USA",
+	"1 класс": "#",
+	"волшебные приключения":    "magic adventures",
+	"государственная политика": "public policy",
+	"детектив":         "detective",
+	"детская классика": "children's classic",
+	"драма":            "drama",
+	"законы Вселенной": "laws of the universe",
+	"зарубежная деловая литература":         "business",
+	"зарубежная образовательная литература": "education",
+	"квантовая физика":                      "the quantum physics",
+	"книги по философии":                    "philosophy",
+	"комедия":                               "comedy",
+	"Латинская Америка":                     "Latin America",
+	"мелодрама":                             "melodrama",
+	"мультфильм":                            "cartoon",
+	"мюзикл":                                "musical",
+	"научная фантастика":                    "science fiction",
+	"общая биология":                        "biology",
+	"общая экономическая теория":            "general economic theory",
+	"параллельные миры":                     "parallel worlds",
+	"политология":                           "political science",
+	"приключение":                           "adventures",
+	"приключения":                           "adventures",
+	"семейный":                              "family",
+	"сказки":                                "fairy tale",
+	"стимпанк":                              "steampunk",
+	"терроризм":                             "terrorism",
+	"физика":                                "physics",
+	"физические теории":                     "physical theories",
+	"фэнтези":                               "fantasy",
+	"частная собственность":                 "private property",
+	"экономическая политика":                "economic policy",
+	"экономические реформы":                 "economic reforms",
+	"экранизации":                           "film adaptation",
+	"юридический триллер":                   "legal thriller",
 }
 
 func PrintList(w *bufio.Writer, title string, lst []string) {
@@ -177,14 +205,17 @@ func (book *Book) PrintMarkdown() {
 	_, err = fmt.Fprintf(w, "**rate:**\n")
 	check(err)
 
+	PrintList(w, "**genres:**", book.Genres)
 	PrintPersonsList(w, "**author:**", book.Authors)
 	PrintPersonsList(w, "**painter:**", book.Painters)
 	PrintPersonsList(w, "**editor:**", book.Editors)
 	_, err = fmt.Fprintf(w, "**publisher:** [[%s]]]\n", book.Publisher)
 	check(err)
 	PrintList(w, "**country:**", book.Countries)
-	PrintList(w, "**tags:**", book.Genres)
+	PrintList(w, "**tags:**", book.Tags)
 
+	_, err = fmt.Fprintf(w, "**isbn:** %s\n", book.Isbn)
+	check(err)
 	_, err = fmt.Fprintf(w, "**[labirint](%s)**\n", book.LabirintUrl)
 	check(err)
 	_, err = fmt.Fprintf(w, "**[goodreads](%s)**\n", book.GoodreadsUrl)
@@ -212,6 +243,32 @@ func (book *Book) PrintMarkdown() {
 	check(err)
 
 	w.Flush()
+}
+
+func (book *Book) InitFileName() {
+	var authors string
+	l := len(book.Authors)
+	if l > 0 {
+		authors = book.Authors[0].LastName + ", " + book.Authors[0].FirstName
+	}
+	if l == 2 {
+		authors += " и " + book.Authors[1].LastName + ", " + book.Authors[1].FirstName
+	}
+	if l > 2 {
+		authors += " и др."
+	}
+
+	var name string
+	if len(book.Name) <= 75 {
+		name = book.Name
+	} else if strings.Contains(book.Name, ".") {
+		v := strings.Split(book.Name, ".")
+		name = v[0]
+	} else {
+		name = book.Name[0:72] + "..."
+	}
+
+	book.FileName = authors + " - " + name + ".md"
 }
 
 func firstRune(str string) (r rune) {
@@ -245,11 +302,41 @@ func ParseList(html string) []string {
 }
 
 func ParsePerson(str string) Person {
+	//fmt.Printf("person: %s\n", str)
 	var person Person
-	v := strings.Split(str, " ")
+	var v []string
+	appendToLast := ""
+	invert := false
+	vec := strings.Split(str, " ")
+	for _, item := range vec {
+		if unicode.IsUpper(firstRune(item)) {
+			v = append(v, item)
+		} else {
+			l := len(v)
+			if l > 0 {
+				v[l-1] += " " + item
+				invert = true
+			} else {
+				appendToLast = item
+			}
+		}
+	}
+
+	if appendToLast != "" {
+		l := len(v)
+		if l > 0 {
+			v[l-1] += " " + appendToLast
+		}
+	}
+
 	if len(v) == 2 {
-		person.FirstName = v[1]
-		person.LastName = v[0]
+		if invert {
+			person.FirstName = v[0]
+			person.LastName = v[1]
+		} else {
+			person.FirstName = v[1]
+			person.LastName = v[0]
+		}
 	}
 	if len(v) == 3 {
 		person.FirstName = v[1]
@@ -293,10 +380,6 @@ func VisitLabirint(link string) Book {
 		}
 	})
 
-	/* 	c.OnHTML("#product-image img[src]", func(e *colly.HTMLElement) {
-		link := e.Attr("src")
-		book.PosterUrl, _ = url.QueryUnescape(link)
-	}) */
 	c.OnHTML("meta", func(e *colly.HTMLElement) {
 		if e.Attr("property") == "og:image" {
 			link := e.Attr("content")
@@ -314,7 +397,7 @@ func VisitLabirint(link string) Book {
 			book.Painters = append(book.Painters, ParsePerson(s))
 		}
 		if strings.HasPrefix(e.Text, "Редактор: ") {
-			s := strings.TrimPrefix(e.Text, "Автор: ")
+			s := strings.TrimPrefix(e.Text, "Редактор: ")
 			book.Editors = append(book.Editors, ParsePerson(s))
 		}
 	})
@@ -328,20 +411,25 @@ func VisitLabirint(link string) Book {
 		book.Year = r.FindString(e.Text)
 	})
 
+	c.OnHTML(".isbn", func(e *colly.HTMLElement) {
+		book.Isbn = strings.TrimPrefix(e.Text, "ISBN: ")
+	})
+
 	c.Visit(book.LabirintUrl)
 
-	var authors string
-	l := len(book.Authors)
-	if l > 0 {
-		authors = book.Authors[0].LastName + ", " + book.Authors[0].FirstName
-	}
-	if l == 2 {
-		authors += " и " + book.Authors[1].LastName + ", " + book.Authors[1].FirstName
-	}
-	if l > 2 {
-		authors += " и др."
-	}
-	book.FileName = authors + " - " + book.Name + ".md"
+	book.InitFileName()
+	/* 	var authors string
+	   	l := len(book.Authors)
+	   	if l > 0 {
+	   		authors = book.Authors[0].LastName + ", " + book.Authors[0].FirstName
+	   	}
+	   	if l == 2 {
+	   		authors += " и " + book.Authors[1].LastName + ", " + book.Authors[1].FirstName
+	   	}
+	   	if l > 2 {
+	   		authors += " и др."
+	   	}
+	   	book.FileName = authors + " - " + book.Name + ".md" */
 
 	return book
 }
@@ -373,9 +461,7 @@ func VisitGoodreads(link string) Book {
 	return book
 }
 
-func VisitLitres(link string) []string {
-
-	var tags []string
+func VisitLitres(book *Book, link string) {
 
 	c := colly.NewCollector(
 		colly.AllowedDomains("www.litres.ru"),
@@ -387,35 +473,54 @@ func VisitLitres(link string) []string {
 		RandomDelay: 1 * time.Second,
 	})
 
-	//document.querySelector("#page-wrap > div.page > div:nth-child(2) > div > div.content_column.column > div > div.biblio_book_center.column > div.biblio_book_info > ul > li:nth-child(2) > a")
-	/* 	c.OnHTML("div.biblio_book_center", func(e *colly.HTMLElement) {
-		fmt.Printf("tag: %s\n", e.Text)
-		if e.Text != "#" {
-			tags = append(tags, e.Text)
-		}
-	}) */
-
-	/* 	c.OnHTML("html", func(e *colly.HTMLElement) {
-		fmt.Printf("tag: %s\n", e.Text)
-		if e.Text != "#" {
-			tags = append(tags, e.Text)
-		}
-	}) */
-
 	c.OnResponse(func(res *colly.Response) {
 		re, _ := regexp.Compile(`(?U)<div class="biblio_book_info">(.*)<\/div>`)
 		m := re.FindSubmatch([]byte(res.Body))
 		if m != nil {
 			s := strings.TrimSpace(string(m[1]))
-			fmt.Println("Parsed: ", s)
+			doc, err := goquery.NewDocumentFromReader(strings.NewReader(s))
+			if err != nil {
+				log.Fatal(err)
+			}
+			doc.Find("li").Each(func(i int, s *goquery.Selection) {
+				title := s.Find("strong").Text()
+				if title == "Теги:" || title == "Жанр:" {
+					s.Find("a").Each(func(i int, a *goquery.Selection) {
+						href, _ := a.Attr("href")
+						if href != "" && href != "#" {
+							trans := Translations[a.Text()]
+							if len(trans) == 0 {
+								fmt.Printf("can't translate: %s\n", a.Text())
+								if title == "Жанр:" {
+									book.Genres = append(book.Genres, a.Text())
+								} else {
+									book.Tags = append(book.Tags, a.Text())
+								}
+							} else if trans != "#" {
+								if title == "Жанр:" {
+									book.Genres = append(book.Genres, trans+"|"+a.Text())
+								} else {
+									book.Tags = append(book.Tags, trans+"|"+a.Text())
+								}
+							}
+						}
+					})
+				}
+			})
+		}
+		if len(book.Authors) == 0 {
+			re, _ := regexp.Compile(`(?U)author: \"(.*)\",`)
+			m := re.FindSubmatch([]byte(res.Body))
+			if m != nil {
+				s := strings.TrimSpace(string(m[1]))
+				book.Authors = append(book.Authors, ParsePerson(s))
+				book.InitFileName()
+			}
 		}
 	})
-	/* 	c.OnHTML("div.p-book-info img.p-picture__image[src]", func(e *colly.HTMLElement) {
-		picture = e.Attr("src")
-	}) */
 
 	c.Visit(link)
-	return tags
+	/* return genres, tags */
 }
 
 func SearchGoogle(query string, site string) string {
@@ -461,28 +566,6 @@ func SearchGoogle10(query string, site string) []string {
 	return urls
 }
 
-/* func ScrapeBookInner(labirint []string, goodreads string, flibusta string, litres string) Book {
-	var book Book
-	var pic string
-
-	w, _ := url.QueryUnescape(goodreads)
-	book = VisitGoodreads(w)
-	book.GoodreadsUrl = w
-	book.FlibustaUrl = flibusta
-	book.LitresUrl = litres
-	book.Summary, pic = VisitLitres(litres)
-	if len(book.PosterUrl) == 0 {
-		book.PosterUrl = pic
-	}
-
-	name := strings.TrimSpace(book.InitName)
-	if name == "" {
-		name = book.Name
-	}
-	book.FileName = name + " (" + book.Year + ").md"
-	return book
-} */
-
 func ScrapeBookInner(urls []string) []Book {
 	var books []Book
 
@@ -491,12 +574,6 @@ func ScrapeBookInner(urls []string) []Book {
 			books = append(books, VisitLabirint(w))
 		}
 	}
-
-	/* 	name := strings.TrimSpace(book.InitName)
-	   	if name == "" {
-	   		name = book.Name
-	   	}
-	   	book.FileName = name + " (" + book.Year + ").md" */
 	return books
 }
 
@@ -519,33 +596,35 @@ func ScrapeBook(query string) []Book {
 }
 
 func main() {
-	/* 	var books []Book
+	var books []Book
 
-	   	reader := bufio.NewReader(os.Stdin)
-	   	query := os.Args[1]
-	   	books = ScrapeBook(query)
-	   	fmt.Printf("=======\n")
-	   	fmt.Printf("0. none \n")
-	   	for i, book := range books {
-	   		fmt.Printf("%d. \"%s\", publisher: %s [%s]\n", i+1, book.FileName, book.Publisher, book.Year)
-	   	}
-	   	text, _ := reader.ReadString('\n')
-	   	text = strings.TrimSuffix(text, "\n")
-	   	if text == "" {
-	   		text = "0"
-	   	}
-	   	i, _ := strconv.Atoi(text)
-	   	if i > 0 {
-	   		time.Sleep(1 * time.Second)
-	   		litres := SearchGoogle(query, "litres.ru")
-	   		fmt.Printf("Litres: %s\n", litres)
-	   		books[i-1].Genres = VisitLitres(litres)
-	   		fmt.Printf("Genres: %v\n", books[i-1].Genres)
-	   		books[i-1].PrintMarkdown()
-	   		fmt.Println("file \"" + books[i-1].FileName + "\" created")
-	   	} */
-	litres := SearchGoogle(os.Args[1], "litres.ru")
-	fmt.Printf("Litres: %s\n", litres)
-	genres := VisitLitres(litres)
-	fmt.Printf("Genres: %v\n", genres)
+	reader := bufio.NewReader(os.Stdin)
+	query := os.Args[1]
+	books = ScrapeBook(query)
+	fmt.Printf("=======\n")
+	fmt.Printf("0. none \n")
+	for i, book := range books {
+		fmt.Printf("%d. \"%s\", publisher: %s [%s]\n", i+1, book.FileName, book.Publisher, book.Year)
+	}
+	text, _ := reader.ReadString('\n')
+	text = strings.TrimSuffix(text, "\n")
+	if text == "" {
+		text = "0"
+	}
+	i, _ := strconv.Atoi(text)
+	if i > 0 {
+		time.Sleep(1 * time.Second)
+		litres := SearchGoogle(query, "litres.ru")
+		fmt.Printf("Litres: %s\n", litres)
+		/* 		books[i-1].Genres, books[i-1].Tags = VisitLitres(litres)
+		   		fmt.Printf("Genres: %v\n", books[i-1].Genres)
+		   		fmt.Printf("Tags:   %v\n", books[i-1].Tags) */
+		VisitLitres(&books[i-1], litres)
+		books[i-1].PrintMarkdown()
+		fmt.Println("file \"" + books[i-1].FileName + "\" created")
+	}
+	/* 	litres := SearchGoogle(os.Args[1], "litres.ru")
+	   	fmt.Printf("Litres: %s\n", litres)
+	   	genres := VisitLitres(litres)
+	   	fmt.Printf("Genres: %v\n", genres) */
 }
