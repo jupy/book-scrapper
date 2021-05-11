@@ -109,63 +109,119 @@ func check(e error) {
 }
 
 var Translations = map[string]string{
-	"Канада":  "Canada",
-	"СССР":    "USSR",
-	"США":     "USA",
-	"1 класс": "#",
-	"волшебные приключения":         "magic adventures",
-	"генетика":                      "genetics",
-	"генная инженерия":              "genetic engineering",
-	"государственная политика":      "public policy",
-	"детектив":                      "detective",
-	"детская классика":              "children's classic",
-	"детское фэнтези":               "children's fantasy",
-	"ДНК":                           "DNA",
-	"драма":                         "drama",
-	"жизненные ценности":            "life values",
-	"законы Вселенной":              "laws of the universe",
-	"зарубежная деловая литература": "business",
+	"Канада":      "Canada",
+	"СССР":        "USSR",
+	"США":         "USA",
+	"1 класс":     "#",
+	"астрономия":  "astronomy",
+	"астрофизика": "astrophysics",
+	"бестселлеры «New York Times»": "bestseller",
+	"биохимия":                     "biochemistry",
+	"биотехнологии":                "biotechnology",
+	"Большой Взрыв":                "big bang",
+	"волшебные приключения":        "magic adventures",
+	"Вселенная":                    "universe",
+	"генетика":                     "genetics",
+	"генетически модифицированные организмы (ГМО)": "gmo",
+	"генетические эксперименты":                    "genetic experiments",
+	"генная инженерия":                             "genetic engineering",
+	"государственная политика":                     "public policy",
+	"детектив":           "detective",
+	"детская классика":   "children's classic",
+	"детское фэнтези":    "children's fantasy",
+	"ДНК":                "DNA",
+	"драма":              "drama",
+	"жизненные ценности": "life values",
+	"законы Вселенной":   "laws of the universe",
+	"зарубежная деловая литература":         "business",
 	"зарубежная образовательная литература": "education",
+	"зарубежная психология":                 "psychology",
 	"зарубежное фэнтези":                    "fantasy",
+	"интеллект":                             "intelligence",
+	"интеллектуальное развитие":             "intellectual development",
 	"искусство быть счастливым":             "the art of being happy",
-	"испытания":                      "trials",
-	"квантовая физика":               "the quantum physics",
-	"книги по философии":             "philosophy",
-	"книги про волшебников":          "wizards",
-	"комедия":                        "comedy",
-	"Латинская Америка":              "Latin America",
-	"магические академии":            "magic academy",
-	"магические способности":         "magical abilities",
-	"мелодрама":                      "melodrama",
-	"мультфильм":                     "cartoon",
-	"мюзикл":                         "musical",
-	"наследственность":               "heredity",
-	"научная фантастика":             "science fiction",
-	"научно-популярная литература":   "popular science literature",
-	"общая биология":                 "biology",
-	"общая экономическая теория":     "general economic theory",
-	"параллельные миры":              "parallel worlds",
-	"отношение к жизни":              "attitude to life",
-	"политология":                    "political science",
-	"позитивное мышление":            "positive thinking",
-	"практическая психология":        "practical psychology",
-	"приключение":                    "adventures",
-	"приключения":                    "adventures",
-	"саморазвитие / личностный рост": "self-development / personal growth",
-	"селекция":                       "selection",
-	"семейный":                       "family",
-	"сказки":                         "fairy tale",
-	"становление героя":              "becoming a hero",
-	"стимпанк":                       "steampunk",
-	"терроризм":                      "terrorism",
-	"физика":                         "physics",
-	"физические теории":              "physical theories",
-	"фэнтези":                        "fantasy",
-	"частная собственность":          "private property",
-	"экономическая политика":         "economic policy",
-	"экономические реформы":          "economic reforms",
-	"экранизации":                    "film adaptation",
-	"юридический триллер":            "legal thriller",
+	"испытания":                             "trials",
+	"квантовая физика":                      "the quantum physics",
+	"книги по философии":                    "philosophy",
+	"книги про волшебников":                 "wizards",
+	"когнитивная психология":                "cognitive psychology",
+	"комедия":                               "comedy",
+	"критическое мышление":                  "critical thinking",
+	"Латинская Америка":                     "Latin America",
+	"личная эффективность":                  "personal effectiveness",
+	"магические академии":                   "magic academy",
+	"магические способности":                "magical abilities",
+	"мелодрама":                             "melodrama",
+	"мифы истории":                          "history myths",
+	"мультфильм":                            "cartoon",
+	"мюзикл":                                "musical",
+	"наследственность":                      "heredity",
+	"научная фантастика":                    "science fiction",
+	"научно-популярная литература":          "popular science literature",
+	"общая биология":                        "biology",
+	"общая экономическая теория":            "general economic theory",
+	"особенности интеллекта":                "features of intelligence",
+	"отношение к жизни":                     "attitude to life",
+	"параллельные миры":                     "parallel worlds",
+	"планеты":                               "planets",
+	"политология":                           "political science",
+	"позитивное мышление":                   "positive thinking",
+	"познавательная информация":             "cognitive information",
+	"практическая психология":               "practical psychology",
+	"премия «Просветитель»":                 "#",
+	"приключение":                           "adventures",
+	"приключения":                           "adventures",
+	"принятие решений":                      "making decisions",
+	"псевдонаука":                           "pseudoscience",
+	"психология личности":                   "psychology of personality",
+	"работа над собой":                      "work on yourself",
+	"развитие интеллекта":                   "development of intelligence",
+	"разоблачения":                          "exposing",
+	"саморазвитие / личностный рост":        "self-development / personal growth",
+	"самосовершенствование":                 "self improvement",
+	"селекция":                              "selection",
+	"семейный":                              "family",
+	"сказки":                                "fairy tale",
+	"современная наука":                     "modern science",
+	"становление героя":                     "becoming a hero",
+	"стимпанк":                              "steampunk",
+	"терроризм":                             "terrorism",
+	"фальсификации":                         "falsifications",
+	"физика":                                "physics",
+	"физические теории":                     "physical theories",
+	"фэнтези":                               "fantasy",
+	"частная собственность":                 "private property",
+	"человеческий разум":                    "human mind",
+	"эволюция человечества":                 "evolution of mankind",
+	"экономическая политика":                "economic policy",
+	"экономические реформы":                 "economic reforms",
+	"экранизации":                           "film adaptation",
+	"юридический триллер":                   "legal thriller",
+}
+
+func Translate(query string) string {
+	trans := Translations[query]
+	if len(trans) > 0 {
+		return trans
+	}
+
+	out, err := exec.Command("translate", "ru", "en", query).Output()
+	if err != nil {
+		log.Fatal(err)
+		panic(err)
+	}
+
+	fmt.Printf("%s\n", string(out))
+
+	vec := strings.Split(string(out), "\n")
+	for _, line := range vec {
+		if strings.HasPrefix(line, "en: ") {
+			trans = strings.TrimPrefix(line, "en: ")
+			Translations[query] = trans
+			return trans
+		}
+	}
+	return ""
 }
 
 func PrintList(w *bufio.Writer, title string, lst []string) {
@@ -620,7 +676,7 @@ func VisitLitres(book *Book, link string) {
 					s.Find("a").Each(func(i int, a *goquery.Selection) {
 						href, _ := a.Attr("href")
 						if href != "" && href != "#" {
-							trans := Translations[a.Text()]
+							trans := Translate(a.Text())
 							if len(trans) == 0 {
 								fmt.Printf("can't translate: %s\n", a.Text())
 								if title == "Жанр:" {
@@ -746,38 +802,37 @@ func ScrapeBook(query string) []Book {
 
 func main() {
 	var books []Book
+	var i int
 
 	reader := bufio.NewReader(os.Stdin)
 	query := os.Args[1]
 	books = ScrapeBook(query)
-	fmt.Printf("=======\n")
-	fmt.Printf("0. none \n")
-	for i, book := range books {
-		u := book.LabirintUrl
-		if u == "" {
-			u = book.OzonUrl
+	if len(books) > 1 {
+		fmt.Printf("=======\n")
+		fmt.Printf("0. none \n")
+		for i, book := range books {
+			u := book.LabirintUrl
+			if u == "" {
+				u = book.OzonUrl
+			}
+			fmt.Printf("%d. \"%s\", publisher: %s [%s] url: %s\n", i+1, book.FileName, book.Publisher, book.Year, u)
 		}
-		fmt.Printf("%d. \"%s\", publisher: %s [%s] url: %s\n", i+1, book.FileName, book.Publisher, book.Year, u)
+		text, _ := reader.ReadString('\n')
+		text = strings.TrimSuffix(text, "\n")
+		if text == "" {
+			text = "0"
+		}
+		i, _ = strconv.Atoi(text)
+	} else if len(books) == 1 {
+		i = 1
 	}
-	text, _ := reader.ReadString('\n')
-	text = strings.TrimSuffix(text, "\n")
-	if text == "" {
-		text = "0"
-	}
-	i, _ := strconv.Atoi(text)
 	if i > 0 {
+		i = i - 1
 		time.Sleep(1 * time.Second)
 		litres := SearchGoogle(query, "litres.ru")
 		fmt.Printf("Litres: %s\n", litres)
-		/* 		books[i-1].Genres, books[i-1].Tags = VisitLitres(litres)
-		   		fmt.Printf("Genres: %v\n", books[i-1].Genres)
-		   		fmt.Printf("Tags:   %v\n", books[i-1].Tags) */
-		VisitLitres(&books[i-1], litres)
-		books[i-1].PrintMarkdown()
-		fmt.Println("file \"" + books[i-1].FileName + "\" created")
+		VisitLitres(&books[i], litres)
+		books[i].PrintMarkdown()
+		fmt.Println("file \"" + books[i].FileName + "\" created")
 	}
-	/* 	litres := SearchGoogle(os.Args[1], "litres.ru")
-	   	fmt.Printf("Litres: %s\n", litres)
-	   	genres := VisitLitres(litres)
-	   	fmt.Printf("Genres: %v\n", genres) */
 }
