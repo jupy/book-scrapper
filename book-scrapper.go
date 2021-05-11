@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -34,9 +35,11 @@ type Book struct {
 	Year         string
 	Genres       []string
 	Tags         []string
+	Series       string
 	Authors      []Person
 	Painters     []Person
 	Editors      []Person
+	Translators  []Person
 	Countries    []string
 	Publisher    string
 	Isbn         string
@@ -50,6 +53,7 @@ type Book struct {
 func (book *Book) Print() {
 	fmt.Printf("Name:           %s\n", book.Name)
 	fmt.Printf("Original Title: %s\n", book.InitName)
+	fmt.Printf("Year:           %s\n", book.Year)
 	fmt.Printf("Picture:        %s\n", book.PosterUrl)
 	for _, a := range book.Genres {
 		fmt.Printf("Genre:          %s\n", a)
@@ -63,6 +67,9 @@ func (book *Book) Print() {
 	for _, d := range book.Editors {
 		fmt.Printf("Editor:       %s, %s\n", d.LastName, d.FirstName)
 	}
+	for _, d := range book.Translators {
+		fmt.Printf("Translators:  %s, %s\n", d.LastName, d.FirstName)
+	}
 	fmt.Printf("Publisher:      %s\n", book.Publisher)
 	for _, c := range book.Countries {
 		fmt.Printf("Country:        %s\n", c)
@@ -71,6 +78,7 @@ func (book *Book) Print() {
 		fmt.Printf("Tag:            %s\n", t)
 	}
 
+	fmt.Printf("Series:         %s\n", book.Series)
 	fmt.Printf("ISBN:           %s\n", book.Isbn)
 	fmt.Printf("Labirint:       %s\n", book.LabirintUrl)
 	fmt.Printf("Goodreads:      %s\n", book.GoodreadsUrl)
@@ -93,16 +101,22 @@ var Translations = map[string]string{
 	"1 класс": "#",
 	"волшебные приключения":    "magic adventures",
 	"государственная политика": "public policy",
-	"детектив":         "detective",
-	"детская классика": "children's classic",
-	"драма":            "drama",
-	"законы Вселенной": "laws of the universe",
-	"зарубежная деловая литература":         "business",
+	"детектив":                      "detective",
+	"детская классика":              "children's classic",
+	"детское фэнтези":               "children's fantasy",
+	"драма":                         "drama",
+	"законы Вселенной":              "laws of the universe",
+	"зарубежная деловая литература": "business",
 	"зарубежная образовательная литература": "education",
+	"зарубежное фэнтези":                    "fantasy",
+	"испытания":                             "trials",
 	"квантовая физика":                      "the quantum physics",
 	"книги по философии":                    "philosophy",
+	"книги про волшебников":                 "wizards",
 	"комедия":                               "comedy",
 	"Латинская Америка":                     "Latin America",
+	"магические академии":                   "magic academy",
+	"магические способности":                "magical abilities",
 	"мелодрама":                             "melodrama",
 	"мультфильм":                            "cartoon",
 	"мюзикл":                                "musical",
@@ -115,6 +129,7 @@ var Translations = map[string]string{
 	"приключения":                           "adventures",
 	"семейный":                              "family",
 	"сказки":                                "fairy tale",
+	"становление героя":                     "becoming a hero",
 	"стимпанк":                              "steampunk",
 	"терроризм":                             "terrorism",
 	"физика":                                "physics",
@@ -209,9 +224,12 @@ func (book *Book) PrintMarkdown() {
 	PrintPersonsList(w, "**author:**", book.Authors)
 	PrintPersonsList(w, "**painter:**", book.Painters)
 	PrintPersonsList(w, "**editor:**", book.Editors)
+	PrintPersonsList(w, "**translators:**", book.Translators)
 	_, err = fmt.Fprintf(w, "**publisher:** [[%s]]]\n", book.Publisher)
 	check(err)
 	PrintList(w, "**country:**", book.Countries)
+	_, err = fmt.Fprintf(w, "**series:** [[%s]]]\n", book.Series)
+	check(err)
 	PrintList(w, "**tags:**", book.Tags)
 
 	_, err = fmt.Fprintf(w, "**isbn:** %s\n", book.Isbn)
@@ -247,6 +265,10 @@ func (book *Book) PrintMarkdown() {
 
 func (book *Book) InitFileName() {
 	var authors string
+	sort.Slice(book.Authors, func(i, j int) bool {
+		return book.Authors[i].LastName < book.Authors[j].LastName
+	})
+	/* fmt.Printf("authors: %v\n", book.Authors) */
 	l := len(book.Authors)
 	if l > 0 {
 		authors = book.Authors[0].LastName + ", " + book.Authors[0].FirstName
@@ -353,8 +375,6 @@ func VisitLabirint(link string) Book {
 	book.Type = "book"
 	book.LabirintUrl = link
 
-	fmt.Printf("Labirint: %s\n", link)
-
 	c := colly.NewCollector(
 		colly.AllowedDomains("www.labirint.ru"),
 	)
@@ -389,16 +409,25 @@ func VisitLabirint(link string) Book {
 
 	c.OnHTML(".authors", func(e *colly.HTMLElement) {
 		if strings.HasPrefix(e.Text, "Автор: ") {
-			s := strings.TrimPrefix(e.Text, "Автор: ")
-			book.Authors = append(book.Authors, ParsePerson(s))
+			e.ForEach("a[href]", func(i int, a *colly.HTMLElement) {
+				/* fmt.Printf("author: %s\n", a.Text) */
+				book.Authors = append(book.Authors, ParsePerson(a.Text))
+			})
 		}
 		if strings.HasPrefix(e.Text, "Художник: ") {
-			s := strings.TrimPrefix(e.Text, "Художник: ")
-			book.Painters = append(book.Painters, ParsePerson(s))
+			e.ForEach("a[href]", func(i int, a *colly.HTMLElement) {
+				book.Painters = append(book.Painters, ParsePerson(a.Text))
+			})
 		}
 		if strings.HasPrefix(e.Text, "Редактор: ") {
-			s := strings.TrimPrefix(e.Text, "Редактор: ")
-			book.Editors = append(book.Editors, ParsePerson(s))
+			e.ForEach("a[href]", func(i int, a *colly.HTMLElement) {
+				book.Editors = append(book.Editors, ParsePerson(a.Text))
+			})
+		}
+		if strings.HasPrefix(e.Text, "Переводчик: ") {
+			e.ForEach("a[href]", func(i int, a *colly.HTMLElement) {
+				book.Translators = append(book.Translators, ParsePerson(a.Text))
+			})
 		}
 	})
 
@@ -411,6 +440,10 @@ func VisitLabirint(link string) Book {
 		book.Year = r.FindString(e.Text)
 	})
 
+	c.OnHTML(".series a", func(e *colly.HTMLElement) {
+		book.Series = e.Text
+	})
+
 	c.OnHTML(".isbn", func(e *colly.HTMLElement) {
 		book.Isbn = strings.TrimPrefix(e.Text, "ISBN: ")
 	})
@@ -418,18 +451,6 @@ func VisitLabirint(link string) Book {
 	c.Visit(book.LabirintUrl)
 
 	book.InitFileName()
-	/* 	var authors string
-	   	l := len(book.Authors)
-	   	if l > 0 {
-	   		authors = book.Authors[0].LastName + ", " + book.Authors[0].FirstName
-	   	}
-	   	if l == 2 {
-	   		authors += " и " + book.Authors[1].LastName + ", " + book.Authors[1].FirstName
-	   	}
-	   	if l > 2 {
-	   		authors += " и др."
-	   	}
-	   	book.FileName = authors + " - " + book.Name + ".md" */
 
 	return book
 }
@@ -604,7 +625,7 @@ func main() {
 	fmt.Printf("=======\n")
 	fmt.Printf("0. none \n")
 	for i, book := range books {
-		fmt.Printf("%d. \"%s\", publisher: %s [%s]\n", i+1, book.FileName, book.Publisher, book.Year)
+		fmt.Printf("%d. \"%s\", publisher: %s [%s] url: %s\n", i+1, book.FileName, book.Publisher, book.Year, book.LabirintUrl)
 	}
 	text, _ := reader.ReadString('\n')
 	text = strings.TrimSuffix(text, "\n")
