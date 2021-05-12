@@ -621,9 +621,11 @@ func VisitLivelib(link string) Book {
 	})
 
 	c.OnHTML("h2.bc-author", func(e *colly.HTMLElement) {
-		str := strings.TrimSpace(e.Text)
-		/* fmt.Printf("author: %v\n", e.Text) */
-		book.Authors = append(book.Authors, ParsePerson(str, true))
+		e.ForEach("a[href].author-item", func(i int, a *colly.HTMLElement) {
+			str := strings.TrimSpace(a.Text)
+			fmt.Printf("author: %v\n", a.Text)
+			book.Authors = append(book.Authors, ParsePerson(str, true))
+		})
 	})
 
 	c.OnHTML("#main-image-book", func(e *colly.HTMLElement) {
@@ -643,6 +645,35 @@ func VisitLivelib(link string) Book {
 		e.ForEach("a[href]", func(i int, a *colly.HTMLElement) {
 			book.AppendGenre(a.Text)
 		})
+	})
+
+	c.OnHTML(".bc-info__wrapper div p", func(e *colly.HTMLElement) {
+		if strings.Contains(e.Text, "Жанры:") {
+			e.ForEach("a[href]", func(i int, a *colly.HTMLElement) {
+				book.AppendGenre(a.Text)
+			})
+		}
+		/* 		else if strings.Contains(e.Text, "Теги:") {
+			e.ForEach("a[href]", func(i int, a *colly.HTMLElement) {
+				book.AppendGenre(a.Text)
+			})
+		} */
+	})
+
+	c.OnHTML(".bc-info div p span", func(e *colly.HTMLElement) {
+		if e.Attr("itemprop") == "isbn" {
+			book.Isbn = strings.TrimSpace(e.Text)
+		}
+	})
+
+	c.OnHTML(".bc-info div p", func(e *colly.HTMLElement) {
+		if strings.Contains(e.Text, "Год издания:") {
+			r, _ := regexp.Compile("[0-9][0-9][0-9][0-9]")
+			s := r.FindString(e.Text)
+			if s != "" {
+				book.Year = s
+			}
+		}
 	})
 
 	c.OnHTML("#lenta-card__text-edition-escaped p", func(e *colly.HTMLElement) {
@@ -750,8 +781,10 @@ func VisitLitres(book *Book, link string) {
 		}
 	})
 
-	book.LitresUrl = strings.TrimSuffix(link, "chitat-onlayn/")
-	c.Visit(book.LitresUrl)
+	if strings.Contains(link, "litres.ru") {
+		book.LitresUrl = strings.TrimSuffix(link, "chitat-onlayn/")
+		c.Visit(book.LitresUrl)
+	}
 }
 
 func SearchGoogle(query string, site string) string {
