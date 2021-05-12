@@ -20,6 +20,8 @@ import (
 	"github.com/gocolly/colly"
 )
 
+var translator TagTranslator
+
 type Person struct {
 	FirstName  string
 	MiddleName string
@@ -36,15 +38,17 @@ func (person *Person) PrintName() string {
 }
 
 type Book struct {
-	Type         string
-	FileName     string
-	ShortName    string
-	Name         string
-	InitName     string
-	PosterUrl    string
-	Year         string
-	Genres       []string
-	Tags         []string
+	Type      string
+	FileName  string
+	ShortName string
+	Name      string
+	InitName  string
+	PosterUrl string
+	Year      string
+	/* 	Genres       []string
+	   	Tags         []string */
+	Genres       map[string]string
+	Tags         map[string]string
 	Series       string
 	Authors      []Person
 	Painters     []Person
@@ -59,6 +63,15 @@ type Book struct {
 	FlibustaUrl  string
 	LitresUrl    string
 	OzonUrl      string
+	LivelibUrl   string
+}
+
+func NewBook() Book {
+	var book Book
+	book.Type = "book"
+	book.Genres = make(map[string]string)
+	book.Tags = make(map[string]string)
+	return book
 }
 
 func (book *Book) Print() {
@@ -67,7 +80,7 @@ func (book *Book) Print() {
 	fmt.Printf("Year:           %s\n", book.Year)
 	fmt.Printf("Picture:        %s\n", book.PosterUrl)
 	for _, a := range book.Genres {
-		fmt.Printf("Genre:          %s\n", a)
+		fmt.Printf("Genre:          [%s]\n", book.GetGenre(a))
 	}
 	for _, d := range book.Authors {
 		fmt.Printf("Author:       %s, %s\n", d.LastName, d.FirstName)
@@ -86,7 +99,7 @@ func (book *Book) Print() {
 		fmt.Printf("Country:        %s\n", c)
 	}
 	for _, t := range book.Tags {
-		fmt.Printf("Tag:            %s\n", t)
+		fmt.Printf("Tag:            [%s]\n", book.GetTag(t))
 	}
 
 	fmt.Printf("Series:         %s\n", book.Series)
@@ -98,6 +111,10 @@ func (book *Book) Print() {
 	if book.OzonUrl != "" {
 		fmt.Printf("Ozon:         %s\n", book.OzonUrl)
 	}
+	if book.LivelibUrl != "" {
+		fmt.Printf("Livelib:      %s\n", book.LivelibUrl)
+	}
+
 	fmt.Printf("Summary:\n")
 	fmt.Printf("%s\n", book.Summary)
 }
@@ -108,120 +125,31 @@ func check(e error) {
 	}
 }
 
-var Translations = map[string]string{
-	"Канада":      "Canada",
-	"СССР":        "USSR",
-	"США":         "USA",
-	"1 класс":     "#",
-	"астрономия":  "astronomy",
-	"астрофизика": "astrophysics",
-	"бестселлеры «New York Times»": "bestseller",
-	"биохимия":                     "biochemistry",
-	"биотехнологии":                "biotechnology",
-	"Большой Взрыв":                "big bang",
-	"волшебные приключения":        "magic adventures",
-	"Вселенная":                    "universe",
-	"генетика":                     "genetics",
-	"генетически модифицированные организмы (ГМО)": "gmo",
-	"генетические эксперименты":                    "genetic experiments",
-	"генная инженерия":                             "genetic engineering",
-	"государственная политика":                     "public policy",
-	"детектив":           "detective",
-	"детская классика":   "children's classic",
-	"детское фэнтези":    "children's fantasy",
-	"ДНК":                "DNA",
-	"драма":              "drama",
-	"жизненные ценности": "life values",
-	"законы Вселенной":   "laws of the universe",
-	"зарубежная деловая литература":         "business",
-	"зарубежная образовательная литература": "education",
-	"зарубежная психология":                 "psychology",
-	"зарубежное фэнтези":                    "fantasy",
-	"интеллект":                             "intelligence",
-	"интеллектуальное развитие":             "intellectual development",
-	"искусство быть счастливым":             "the art of being happy",
-	"испытания":                             "trials",
-	"квантовая физика":                      "the quantum physics",
-	"книги по философии":                    "philosophy",
-	"книги про волшебников":                 "wizards",
-	"когнитивная психология":                "cognitive psychology",
-	"комедия":                               "comedy",
-	"критическое мышление":                  "critical thinking",
-	"Латинская Америка":                     "Latin America",
-	"личная эффективность":                  "personal effectiveness",
-	"магические академии":                   "magic academy",
-	"магические способности":                "magical abilities",
-	"мелодрама":                             "melodrama",
-	"мифы истории":                          "history myths",
-	"мультфильм":                            "cartoon",
-	"мюзикл":                                "musical",
-	"наследственность":                      "heredity",
-	"научная фантастика":                    "science fiction",
-	"научно-популярная литература":          "popular science literature",
-	"общая биология":                        "biology",
-	"общая экономическая теория":            "general economic theory",
-	"особенности интеллекта":                "features of intelligence",
-	"отношение к жизни":                     "attitude to life",
-	"параллельные миры":                     "parallel worlds",
-	"планеты":                               "planets",
-	"политология":                           "political science",
-	"позитивное мышление":                   "positive thinking",
-	"познавательная информация":             "cognitive information",
-	"практическая психология":               "practical psychology",
-	"премия «Просветитель»":                 "#",
-	"приключение":                           "adventures",
-	"приключения":                           "adventures",
-	"принятие решений":                      "making decisions",
-	"псевдонаука":                           "pseudoscience",
-	"психология личности":                   "psychology of personality",
-	"работа над собой":                      "work on yourself",
-	"развитие интеллекта":                   "development of intelligence",
-	"разоблачения":                          "exposing",
-	"саморазвитие / личностный рост":        "self-development / personal growth",
-	"самосовершенствование":                 "self improvement",
-	"селекция":                              "selection",
-	"семейный":                              "family",
-	"сказки":                                "fairy tale",
-	"современная наука":                     "modern science",
-	"становление героя":                     "becoming a hero",
-	"стимпанк":                              "steampunk",
-	"терроризм":                             "terrorism",
-	"фальсификации":                         "falsifications",
-	"физика":                                "physics",
-	"физические теории":                     "physical theories",
-	"фэнтези":                               "fantasy",
-	"частная собственность":                 "private property",
-	"человеческий разум":                    "human mind",
-	"эволюция человечества":                 "evolution of mankind",
-	"экономическая политика":                "economic policy",
-	"экономические реформы":                 "economic reforms",
-	"экранизации":                           "film adaptation",
-	"юридический триллер":                   "legal thriller",
-}
-
-func Translate(query string) string {
-	trans := Translations[query]
-	if len(trans) > 0 {
-		return trans
+func PrintMap(w *bufio.Writer, title string, lst map[string]string) {
+	if len(lst) == 0 {
+		return
 	}
 
-	out, err := exec.Command("translate", "ru", "en", query).Output()
-	if err != nil {
-		log.Fatal(err)
-		panic(err)
-	}
+	_, err := fmt.Fprintf(w, title)
+	check(err)
 
-	fmt.Printf("%s\n", string(out))
+	text := ""
+	for k, v := range lst {
+		if len(text) > 0 {
+			text += ", "
+		}
 
-	vec := strings.Split(string(out), "\n")
-	for _, line := range vec {
-		if strings.HasPrefix(line, "en: ") {
-			trans = strings.TrimPrefix(line, "en: ")
-			Translations[query] = trans
-			return trans
+		if v == "" || v == "#" {
+			text += "[[" + k + "]]"
+		} else {
+			text += "[[" + k + "|" + v + "]]"
 		}
 	}
-	return ""
+
+	_, err = fmt.Fprintf(w, " %s", text)
+	check(err)
+	_, err = fmt.Fprintf(w, "\n")
+	check(err)
 }
 
 func PrintList(w *bufio.Writer, title string, lst []string) {
@@ -302,7 +230,7 @@ func (book *Book) PrintMarkdown() {
 	_, err = fmt.Fprintf(w, "**rate:**\n")
 	check(err)
 
-	PrintList(w, "**genres:**", book.Genres)
+	PrintMap(w, "**genres:**", book.Genres)
 	PrintPersonsList(w, "**author:**", book.Authors)
 	PrintPersonsList(w, "**painter:**", book.Painters)
 	PrintPersonsList(w, "**editor:**", book.Editors)
@@ -314,7 +242,7 @@ func (book *Book) PrintMarkdown() {
 		_, err = fmt.Fprintf(w, "**series:** [[%s]]\n", book.Series)
 		check(err)
 	}
-	PrintList(w, "**tags:**", book.Tags)
+	PrintMap(w, "**tags:**", book.Tags)
 
 	_, err = fmt.Fprintf(w, "**isbn:** %s\n", book.Isbn)
 	check(err)
@@ -336,6 +264,10 @@ func (book *Book) PrintMarkdown() {
 	}
 	if book.OzonUrl != "" {
 		_, err = fmt.Fprintf(w, "**[ozon](%s)**\n", book.OzonUrl)
+		check(err)
+	}
+	if book.LivelibUrl != "" {
+		_, err = fmt.Fprintf(w, "**[livelib](%s)**\n", book.LivelibUrl)
 		check(err)
 	}
 
@@ -389,6 +321,42 @@ func (book *Book) InitFileName() {
 	book.FileName = authors + " - " + name + ".md"
 }
 
+func (book *Book) AppendGenre(genre string) {
+	genre = strings.ToLower(genre)
+	trans := translator.Translate(genre)
+	if trans == "" {
+		fmt.Printf("can't translate: %s\n", genre)
+	}
+	book.Genres[genre] = trans
+}
+
+func (book *Book) GetGenre(genre string) string {
+	trans := book.Genres[genre]
+	if trans == "" && trans != "#" {
+		return trans + "|" + genre
+	} else {
+		return genre
+	}
+}
+
+func (book *Book) AppendTag(tag string) {
+	tag = strings.ToLower(tag)
+	trans := translator.Translate(tag)
+	if trans == "" {
+		fmt.Printf("can't translate: %s\n", tag)
+	}
+	book.Tags[tag] = trans
+}
+
+func (book *Book) GetTag(tag string) string {
+	trans := book.Tags[tag]
+	if trans == "" && trans != "#" {
+		return trans + "|" + tag
+	} else {
+		return tag
+	}
+}
+
 func firstRune(str string) (r rune) {
 	for _, r = range str {
 		return
@@ -419,12 +387,11 @@ func ParseList(html string) []string {
 	return list
 }
 
-func ParsePerson(str string) Person {
+func ParsePerson(str string, invert bool) Person {
 	/* fmt.Printf("person: %s\n", str) */
 	var person Person
 	var v []string
 	appendToLast := ""
-	invert := false
 	vec := strings.Split(str, " ")
 	for _, item := range vec {
 		r := []rune(item)
@@ -441,7 +408,7 @@ func ParsePerson(str string) Person {
 			l := len(v)
 			if l > 0 {
 				v[l-1] += " " + item
-				invert = true
+				invert = !invert
 			} else {
 				appendToLast = item
 			}
@@ -475,9 +442,7 @@ func ParsePerson(str string) Person {
 
 func VisitLabirint(link string) Book {
 
-	var book Book
-
-	book.Type = "book"
+	book := NewBook()
 	book.LabirintUrl = link
 
 	c := colly.NewCollector(
@@ -516,22 +481,22 @@ func VisitLabirint(link string) Book {
 		if strings.HasPrefix(e.Text, "Автор: ") {
 			e.ForEach("a[href]", func(i int, a *colly.HTMLElement) {
 				/* fmt.Printf("author: %s\n", a.Text) */
-				book.Authors = append(book.Authors, ParsePerson(a.Text))
+				book.Authors = append(book.Authors, ParsePerson(a.Text, false))
 			})
 		}
 		if strings.HasPrefix(e.Text, "Художник: ") {
 			e.ForEach("a[href]", func(i int, a *colly.HTMLElement) {
-				book.Painters = append(book.Painters, ParsePerson(a.Text))
+				book.Painters = append(book.Painters, ParsePerson(a.Text, false))
 			})
 		}
 		if strings.HasPrefix(e.Text, "Редактор: ") {
 			e.ForEach("a[href]", func(i int, a *colly.HTMLElement) {
-				book.Editors = append(book.Editors, ParsePerson(a.Text))
+				book.Editors = append(book.Editors, ParsePerson(a.Text, false))
 			})
 		}
 		if strings.HasPrefix(e.Text, "Переводчик: ") {
 			e.ForEach("a[href]", func(i int, a *colly.HTMLElement) {
-				book.Translators = append(book.Translators, ParsePerson(a.Text))
+				book.Translators = append(book.Translators, ParsePerson(a.Text, false))
 			})
 		}
 	})
@@ -562,9 +527,7 @@ func VisitLabirint(link string) Book {
 
 func VisitOzon(link string) Book {
 
-	var book Book
-
-	book.Type = "book"
+	book := NewBook()
 	book.OzonUrl = link
 
 	c := colly.NewCollector(
@@ -577,16 +540,22 @@ func VisitOzon(link string) Book {
 		RandomDelay: 1 * time.Second,
 	})
 
+	c.OnError(func(_ *colly.Response, err error) {
+		fmt.Printf("Error: %v\n", err)
+		/* log.Println("Something went wrong:", err) */
+	})
+
 	c.OnHTML("h1", func(e *colly.HTMLElement) {
+		fmt.Printf("h1: %s\n", e.Text)
 		if book.Name == "" {
 			v := strings.Split(e.Text, " | ")
 			if len(v) > 0 {
 				book.Name = strings.TrimSpace(v[0])
 			}
 			if len(v) > 1 {
-				book.Authors = append(book.Authors, ParsePerson(v[1]))
+				book.Authors = append(book.Authors, ParsePerson(v[1], false))
 			}
-			/* fmt.Printf("author: %s\n", a.Text) */
+			fmt.Printf("title: %v\n", v)
 		}
 	})
 
@@ -606,7 +575,7 @@ func VisitOzon(link string) Book {
 		}
 		if strings.Contains(e.ChildText("dt"), "Переводчик") {
 			e.ForEach("dd a[href]", func(i int, a *colly.HTMLElement) {
-				book.Translators = append(book.Translators, ParsePerson(a.Text))
+				book.Translators = append(book.Translators, ParsePerson(a.Text, false))
 			})
 		}
 		if strings.Contains(e.ChildText("dt"), "ISBN") {
@@ -615,7 +584,81 @@ func VisitOzon(link string) Book {
 		}
 	})
 
+	/* 	c.OnResponse(func(res *colly.Response) {
+		fmt.Printf("%v\n", res.StatusCode)
+		fmt.Printf("%s\n", res.Body)
+	}) */
+
+	fmt.Printf("ozon: %s\n", book.OzonUrl)
 	c.Visit(book.OzonUrl)
+
+	book.InitFileName()
+
+	return book
+}
+
+func VisitLivelib(link string) Book {
+
+	book := NewBook()
+	book.LivelibUrl = link
+
+	c := colly.NewCollector(
+		colly.AllowedDomains("www.livelib.ru"),
+	)
+
+	c.Limit(&colly.LimitRule{
+		DomainGlob:  "www.livelib.ru/book/*",
+		Delay:       1 * time.Second,
+		RandomDelay: 1 * time.Second,
+	})
+
+	c.OnError(func(_ *colly.Response, err error) {
+		fmt.Printf("Error: %v\n", err)
+	})
+
+	c.OnHTML("h1", func(e *colly.HTMLElement) {
+		if book.Name == "" {
+			book.Name = strings.TrimSpace(e.Text)
+		}
+	})
+
+	c.OnHTML("h2.bc-author", func(e *colly.HTMLElement) {
+		str := strings.TrimSpace(e.Text)
+		/* fmt.Printf("author: %v\n", e.Text) */
+		book.Authors = append(book.Authors, ParsePerson(str, true))
+	})
+
+	c.OnHTML("#main-image-book", func(e *colly.HTMLElement) {
+		link := e.Attr("src")
+		book.PosterUrl, _ = url.QueryUnescape(link)
+	})
+
+	c.OnHTML("table.bc-edition tr td", func(e *colly.HTMLElement) {
+		/* 		fmt.Printf("db8   : %s\n", e.Text)
+		   		fmt.Printf("db8 dt: %s\n", e.ChildText("dt")) */
+		if e.Attr("itemprop") == "publisher" {
+			book.Publisher = strings.TrimSpace(e.Text)
+		}
+	})
+
+	c.OnHTML(".bc-genre", func(e *colly.HTMLElement) {
+		e.ForEach("a[href]", func(i int, a *colly.HTMLElement) {
+			book.AppendGenre(a.Text)
+		})
+	})
+
+	c.OnHTML("#lenta-card__text-edition-escaped p", func(e *colly.HTMLElement) {
+		if e.Attr("itemprop") == "description" {
+			book.Summary = e.Text
+		}
+	})
+
+	/* 	c.OnResponse(func(res *colly.Response) {
+		fmt.Printf("%v\n", res.StatusCode)
+		fmt.Printf("%s\n", res.Body)
+	}) */
+
+	c.Visit(book.LivelibUrl)
 
 	book.InitFileName()
 
@@ -624,9 +667,7 @@ func VisitOzon(link string) Book {
 
 func VisitGoodreads(link string) Book {
 
-	var book Book
-
-	book.Type = "book"
+	book := NewBook()
 	book.GoodreadsUrl = link
 
 	c := colly.NewCollector(
@@ -676,20 +717,10 @@ func VisitLitres(book *Book, link string) {
 					s.Find("a").Each(func(i int, a *goquery.Selection) {
 						href, _ := a.Attr("href")
 						if href != "" && href != "#" {
-							trans := Translate(a.Text())
-							if len(trans) == 0 {
-								fmt.Printf("can't translate: %s\n", a.Text())
-								if title == "Жанр:" {
-									book.Genres = append(book.Genres, a.Text())
-								} else {
-									book.Tags = append(book.Tags, a.Text())
-								}
-							} else if trans != "#" {
-								if title == "Жанр:" {
-									book.Genres = append(book.Genres, trans+"|"+a.Text())
-								} else {
-									book.Tags = append(book.Tags, trans+"|"+a.Text())
-								}
+							if title == "Жанр:" {
+								book.AppendGenre(a.Text())
+							} else {
+								book.AppendTag(a.Text())
 							}
 						}
 					})
@@ -701,7 +732,7 @@ func VisitLitres(book *Book, link string) {
 			m := re.FindSubmatch([]byte(res.Body))
 			if m != nil {
 				s := strings.TrimSpace(string(m[1]))
-				book.Authors = append(book.Authors, ParsePerson(s))
+				book.Authors = append(book.Authors, ParsePerson(s, false))
 				book.InitFileName()
 			}
 		}
@@ -776,7 +807,10 @@ func ScrapeBookInner(urls []string) []Book {
 			books = append(books, VisitLabirint(w))
 		}
 		if strings.HasPrefix(w, "https://www.ozon.ru/product/") {
-			books = append(books, VisitOzon(w))
+			//books = append(books, VisitOzon(w))
+		}
+		if strings.HasPrefix(w, "https://www.livelib.ru/book/") {
+			books = append(books, VisitLivelib(w))
 		}
 	}
 	return books
@@ -792,10 +826,15 @@ func ScrapeOzon(query string) []Book {
 	return ScrapeBookInner(ozon)
 }
 
+func ScrapeLivelib(query string) []Book {
+	livelib := SearchGoogle10(query, "livelib.ru/book")
+	return ScrapeBookInner(livelib)
+}
+
 func ScrapeBook(query string) []Book {
 	books := ScrapeLabirint(query)
 	if len(books) == 0 {
-		books = ScrapeOzon(query)
+		books = ScrapeLivelib(query)
 	}
 	return books
 }
@@ -803,6 +842,8 @@ func ScrapeBook(query string) []Book {
 func main() {
 	var books []Book
 	var i int
+
+	translator.Load()
 
 	reader := bufio.NewReader(os.Stdin)
 	query := os.Args[1]
@@ -825,7 +866,10 @@ func main() {
 		i, _ = strconv.Atoi(text)
 	} else if len(books) == 1 {
 		i = 1
+	} else if len(books) == 0 {
+		fmt.Println("Nothing found")
 	}
+
 	if i > 0 {
 		i = i - 1
 		time.Sleep(1 * time.Second)
@@ -835,4 +879,6 @@ func main() {
 		books[i].PrintMarkdown()
 		fmt.Println("file \"" + books[i].FileName + "\" created")
 	}
+
+	translator.Save()
 }
