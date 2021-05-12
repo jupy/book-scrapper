@@ -38,15 +38,13 @@ func (person *Person) PrintName() string {
 }
 
 type Book struct {
-	Type      string
-	FileName  string
-	ShortName string
-	Name      string
-	InitName  string
-	PosterUrl string
-	Year      string
-	/* 	Genres       []string
-	   	Tags         []string */
+	Type         string
+	FileName     string
+	ShortName    string
+	Name         string
+	InitName     string
+	PosterUrl    string
+	Year         string
 	Genres       map[string]string
 	Tags         map[string]string
 	Series       string
@@ -142,7 +140,7 @@ func PrintMap(w *bufio.Writer, title string, lst map[string]string) {
 		if v == "" || v == "#" {
 			text += "[[" + k + "]]"
 		} else {
-			text += "[[" + k + "|" + v + "]]"
+			text += "[[" + v + "|" + k + "]]"
 		}
 	}
 
@@ -299,10 +297,10 @@ func (book *Book) InitFileName() {
 	/* fmt.Printf("authors: %v\n", book.Authors) */
 	l := len(book.Authors)
 	if l > 0 {
-		authors = book.Authors[0].LastName + ", " + book.Authors[0].FirstName
+		authors = book.Authors[0].PrintName()
 	}
 	if l == 2 {
-		authors += " и " + book.Authors[1].LastName + ", " + book.Authors[1].FirstName
+		authors += " и " + book.Authors[1].PrintName()
 	}
 	if l > 2 {
 		authors += " и др."
@@ -818,6 +816,7 @@ func ScrapeBookInner(urls []string) []Book {
 
 func ScrapeLabirint(query string) []Book {
 	labirint := SearchGoogle10(query, "labirint.ru/books")
+	//fmt.Printf("Labirint: %v\n", labirint)
 	return ScrapeBookInner(labirint)
 }
 
@@ -828,6 +827,7 @@ func ScrapeOzon(query string) []Book {
 
 func ScrapeLivelib(query string) []Book {
 	livelib := SearchGoogle10(query, "livelib.ru/book")
+	//fmt.Printf("Livelib: %v\n", livelib)
 	return ScrapeBookInner(livelib)
 }
 
@@ -854,7 +854,7 @@ func main() {
 		for i, book := range books {
 			u := book.LabirintUrl
 			if u == "" {
-				u = book.OzonUrl
+				u = book.LivelibUrl
 			}
 			fmt.Printf("%d. \"%s\", publisher: %s [%s] url: %s\n", i+1, book.FileName, book.Publisher, book.Year, u)
 		}
