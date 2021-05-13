@@ -281,6 +281,17 @@ func (book *Book) SaveMarkdown() {
 	w.Flush()
 }
 
+func IsEnglish(s string) bool {
+	if len(s) <= 0 {
+		return false
+	}
+	r := s[0]
+	if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
+		return false
+	}
+	return true
+}
+
 func (book *Book) InitFileName() {
 	var authors string
 	sort.Slice(book.Authors, func(i, j int) bool {
@@ -292,10 +303,19 @@ func (book *Book) InitFileName() {
 		authors = book.Authors[0].PrintName()
 	}
 	if l == 2 {
-		authors += " и " + book.Authors[1].PrintName()
+		a := book.Authors[1].PrintName()
+		if IsEnglish(a) {
+			authors += " and " + a
+		} else {
+			authors += " и " + a
+		}
 	}
 	if l > 2 {
-		authors += " и др."
+		if IsEnglish(authors) {
+			authors += " et al"
+		} else {
+			authors += " и др."
+		}
 	}
 
 	var name string
@@ -627,25 +647,75 @@ func VisitLivelib(link string) Book {
 func VisitGoodreads(link string) Book {
 
 	book := NewBook()
-	book.GoodreadsUrl = link
 
 	c := colly.NewCollector(
-		colly.AllowedDomains("goodreads.com"),
+		colly.AllowedDomains("www.goodreads.com"),
 	)
 
 	c.Limit(&colly.LimitRule{
-		DomainGlob:  "goodreads.com/*",
+		DomainGlob:  "www.goodreads.com/*",
 		Delay:       1 * time.Second,
 		RandomDelay: 1 * time.Second,
 	})
 
-	c.OnHTML(".infobox tbody tr:nth-child(1)", func(e *colly.HTMLElement) {
+	c.OnHTML("#bookTitle", func(e *colly.HTMLElement) {
 		if len(book.Name) == 0 {
-			book.Name = e.Text
+			book.Name = strings.TrimSpace(e.Text)
 		}
 	})
 
+	c.OnHTML("#bookAuthors", func(e *colly.HTMLElement) {
+		e.ForEach("a[href].authorName", func(i int, a *colly.HTMLElement) {
+			str := strings.TrimSpace(a.Text)
+			/* fmt.Printf("author: %s\n", a.Text) */
+			book.Authors = append(book.Authors, ParsePerson(str, true))
+		})
+	})
+
+	c.OnHTML("img#coverImage", func(e *colly.HTMLElement) {
+		link := e.Attr("src")
+		book.PosterUrl, _ = url.QueryUnescape(link)
+	})
+
+	c.OnHTML("#details div.row", func(e *colly.HTMLElement) {
+		if strings.Contains(e.Text, "Published") {
+			r, _ := regexp.Compile("[0-9][0-9][0-9][0-9]")
+			s := r.FindString(e.Text)
+			if s != "" {
+				book.Year = s
+			}
+			r, _ = regexp.Compile(".* by (.*)")
+			m := r.FindSubmatch([]byte(e.Text))
+			if m != nil {
+				book.Publisher = strings.TrimSpace(string(m[1]))
+			}
+		}
+	})
+
+	c.OnHTML("#description span:nth-child(1)", func(e *colly.HTMLElement) {
+		book.Summary = strings.TrimSpace(e.Text)
+	})
+
+	c.OnHTML(".elementList div.left", func(e *colly.HTMLElement) {
+		e.ForEach("a.actionLinkLite.bookPageGenreLink", func(i int, a *colly.HTMLElement) {
+			genre := strings.ToLower(a.Text)
+			book.Genres[genre] = ""
+		})
+	})
+
+	c.OnHTML("#bookDataBox div.clearFloats", func(e *colly.HTMLElement) {
+		e.ForEach("span", func(i int, s *colly.HTMLElement) {
+			if s.Attr("itemprop") == "isbn" {
+				if len(s.Text) == 13 {
+					book.Isbn = s.Text[0:3] + "-" + s.Text[3:4] + "-" + s.Text[4:9] + "-" + s.Text[9:12] + "-" + s.Text[12:13]
+				}
+			}
+		})
+	})
+
+	book.GoodreadsUrl = link
 	c.Visit(book.GoodreadsUrl)
+	book.InitFileName()
 	return book
 }
 
@@ -742,8 +812,8 @@ func SearchGoogle(query string, site string) string {
 	return str
 }
 
-func SearchGoogle10(query string, site string) []string {
-	cmd := exec.Command("googler", "-n", "5", "-w", site, "--np", "--json", query)
+func SearchGoogleN(query string, n string, site string) []string {
+	cmd := exec.Command("googler", "-n", n, "-w", site, "--np", "--json", query)
 	//fmt.Printf("cmd: %s\n", cmd.String())
 	out, err := cmd.Output()
 	if err != nil {
@@ -765,10 +835,18 @@ func SearchGoogle10(query string, site string) []string {
 	return urls
 }
 
+func SearchGoogle10(query string, site string) []string {
+	return SearchGoogleN(query, "10", site)
+}
+
+func SearchGoogle5(query string, site string) []string {
+	return SearchGoogleN(query, "5", site)
+}
+
 func ScrapeLabirint(query string) []Book {
 	//fmt.Printf("Labirint: %v\n", labirint)
 	var books []Book
-	for _, w := range SearchGoogle10(query, "labirint.ru/books") {
+	for _, w := range SearchGoogle5(query, "labirint.ru/books") {
 		fmt.Printf("%v\n", w)
 		if strings.HasPrefix(w, "https://www.labirint.ru/books/") {
 			books = append(books, VisitLabirint(w))
@@ -779,10 +857,22 @@ func ScrapeLabirint(query string) []Book {
 
 func ScrapeLivelib(query string) []Book {
 	var books []Book
-	for _, w := range SearchGoogle10(query, "livelib.ru/book") {
+	for _, w := range SearchGoogle5(query, "livelib.ru/book") {
 		fmt.Printf("%v\n", w)
 		if strings.HasPrefix(w, "https://www.livelib.ru/book/") {
 			books = append(books, VisitLivelib(w))
+		}
+	}
+	return books
+}
+
+func ScrapeGoodreads(query string) []Book {
+	var books []Book
+	for _, w := range SearchGoogle10(query, "goodreads.com") {
+		fmt.Printf("%v\n", w)
+		if strings.HasPrefix(w, "https://www.goodreads.com/book/") ||
+			strings.HasPrefix(w, "https://www.goodreads.com/en/book/") {
+			books = append(books, VisitGoodreads(w))
 		}
 	}
 	return books
@@ -799,6 +889,9 @@ func SelectBook(books []Book) *Book {
 			u := book.LabirintUrl
 			if u == "" {
 				u = book.LivelibUrl
+			}
+			if u == "" {
+				u = book.GoodreadsUrl
 			}
 			fmt.Printf("%d. \"%s\", publisher: %s [%s] url: %s\n", i+1, book.FileName, book.Publisher, book.Year, u)
 		}
@@ -819,20 +912,27 @@ func SelectBook(books []Book) *Book {
 }
 
 func main() {
-
+	var book *Book
 	translator.Load()
 
 	query := os.Args[1]
-	book := SelectBook(ScrapeLabirint(query))
-	if book == nil {
-		book = SelectBook(ScrapeLivelib(query))
+	if IsEnglish(query) {
+		book = SelectBook(ScrapeGoodreads(query))
+	} else {
+		book = SelectBook(ScrapeLabirint(query))
+		if book == nil {
+			book = SelectBook(ScrapeLivelib(query))
+		}
+
+		if book != nil {
+			time.Sleep(1 * time.Second)
+			litres := SearchGoogle(query, "litres.ru")
+			VisitLitres(book, litres)
+			fmt.Printf("Litres: %s\n", book.LitresUrl)
+		}
 	}
 
 	if book != nil {
-		time.Sleep(1 * time.Second)
-		litres := SearchGoogle(query, "litres.ru")
-		VisitLitres(book, litres)
-		fmt.Printf("Litres: %s\n", book.LitresUrl)
 		book.SaveMarkdown()
 		fmt.Println("file \"" + book.FileName + "\" created")
 	}
