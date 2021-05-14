@@ -240,7 +240,18 @@ func (book *Book) InitFileName() {
 		name = book.Name[0:72] + "..."
 	}
 
-	book.FileName = book.GetPrintAuthor() + " - " + name + ".md"
+	name = book.GetPrintAuthor() + " - " + name + ".md"
+	name = strings.ReplaceAll(name, "<", "")
+	name = strings.ReplaceAll(name, ">", "")
+	name = strings.ReplaceAll(name, ":", " -")
+	name = strings.ReplaceAll(name, "«", "")
+	name = strings.ReplaceAll(name, "»", "")
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, "\\", "-")
+	name = strings.ReplaceAll(name, "|", "-")
+	name = strings.ReplaceAll(name, "?", ".")
+	name = strings.ReplaceAll(name, "*", "")
+	book.FileName = name
 }
 
 func firstRune(str string) (r rune) {
@@ -908,7 +919,8 @@ func SelectBook(books []Book) *Book {
 			if u == "" {
 				u = book.GoodreadsUrl
 			}
-			fmt.Printf("%d. \"%s\", publisher: %s [%s] url: %s\n", i+1, book.FileName, book.Publisher, book.Year, u)
+			fmt.Printf("%d. \"%s\" [%s] publisher: %s\n", i+1, book.FileName, book.Year, book.Publisher)
+			fmt.Printf("    %s\n", u)
 		}
 		text, _ := reader.ReadString('\n')
 		text = strings.TrimSuffix(text, "\n")
