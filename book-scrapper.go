@@ -190,6 +190,66 @@ func PrintPersonsList(w *bufio.Writer, title string, lst []Person) {
 	check(err)
 }
 
+func IsEnglish(s string) bool {
+	if len(s) <= 0 {
+		return false
+	}
+	r := s[0]
+	if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
+		return false
+	}
+	return true
+}
+
+func (book *Book) GetPrintAuthor() string {
+	var author string
+	sort.Slice(book.Authors, func(i, j int) bool {
+		return book.Authors[i].LastName < book.Authors[j].LastName
+	})
+	/* fmt.Printf("author: %v\n", book.Authors) */
+	l := len(book.Authors)
+	if l > 0 {
+		author = book.Authors[0].PrintName()
+	}
+	if l == 2 {
+		a := book.Authors[1].PrintName()
+		if IsEnglish(a) {
+			author += " and " + a
+		} else {
+			author += " и " + a
+		}
+	}
+	if l > 2 {
+		if IsEnglish(author) {
+			author += " et al"
+		} else {
+			author += " и др."
+		}
+	}
+	return author
+}
+
+func (book *Book) InitFileName() {
+	var name string
+	if utf8.RuneCountInString(book.Name) <= 75 {
+		name = book.Name
+	} else if strings.Contains(book.Name, ".") {
+		v := strings.Split(book.Name, ".")
+		name = v[0]
+	} else {
+		name = book.Name[0:72] + "..."
+	}
+
+	book.FileName = book.GetPrintAuthor() + " - " + name + ".md"
+}
+
+func firstRune(str string) (r rune) {
+	for _, r = range str {
+		return
+	}
+	return
+}
+
 func (book *Book) SaveMarkdown() {
 	f, err := os.Create(book.FileName)
 	check(err)
@@ -261,6 +321,18 @@ func (book *Book) SaveMarkdown() {
 		check(err)
 	}
 
+	// **{{shell: open-library-folder "/Lib/ru/С/Сото, Эрнандо де"}}**
+	folder := "/Lib/"
+	author := book.GetPrintAuthor()
+	if IsEnglish(author) {
+		folder += "en/"
+	} else {
+		folder += "ru/"
+	}
+	folder += author[0:1] + "/" + author
+	_, err = fmt.Fprintf(w, "**{{shell: open-library-folder \"%s\"}}**\n", folder)
+	check(err)
+
 	_, err = fmt.Fprintf(w, "\n---\n\n")
 	check(err)
 
@@ -279,56 +351,6 @@ func (book *Book) SaveMarkdown() {
 	check(err)
 
 	w.Flush()
-}
-
-func IsEnglish(s string) bool {
-	if len(s) <= 0 {
-		return false
-	}
-	r := s[0]
-	if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
-		return false
-	}
-	return true
-}
-
-func (book *Book) InitFileName() {
-	var authors string
-	sort.Slice(book.Authors, func(i, j int) bool {
-		return book.Authors[i].LastName < book.Authors[j].LastName
-	})
-	/* fmt.Printf("authors: %v\n", book.Authors) */
-	l := len(book.Authors)
-	if l > 0 {
-		authors = book.Authors[0].PrintName()
-	}
-	if l == 2 {
-		a := book.Authors[1].PrintName()
-		if IsEnglish(a) {
-			authors += " and " + a
-		} else {
-			authors += " и " + a
-		}
-	}
-	if l > 2 {
-		if IsEnglish(authors) {
-			authors += " et al"
-		} else {
-			authors += " и др."
-		}
-	}
-
-	var name string
-	if utf8.RuneCountInString(book.Name) <= 75 {
-		name = book.Name
-	} else if strings.Contains(book.Name, ".") {
-		v := strings.Split(book.Name, ".")
-		name = v[0]
-	} else {
-		name = book.Name[0:72] + "..."
-	}
-
-	book.FileName = authors + " - " + name + ".md"
 }
 
 func (book *Book) AppendGenre(genre string) {
@@ -365,13 +387,6 @@ func (book *Book) GetTag(tag string) string {
 	} else {
 		return tag
 	}
-}
-
-func firstRune(str string) (r rune) {
-	for _, r = range str {
-		return
-	}
-	return
 }
 
 func ParseList(html string) []string {
