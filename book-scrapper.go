@@ -430,23 +430,27 @@ func ParsePerson(str string, invert bool) Person {
 	appendToLast := ""
 	vec := strings.Split(str, " ")
 	for _, item := range vec {
-		r := []rune(item)
-		count := utf8.RuneCountInString(item)
-		if unicode.IsUpper(firstRune(item)) {
+		s := strings.TrimSpace(item)
+		if s == "" {
+			continue
+		}
+		r := []rune(s)
+		count := utf8.RuneCountInString(s)
+		if unicode.IsUpper(firstRune(s)) {
 			if (count == 1) ||
 				(count == 2 && r[1] == '.') ||
 				(count == 4 && r[1] == '.' && r[3] == '.') {
-				person.Initials += item
+				person.Initials += s
 			} else {
-				v = append(v, item)
+				v = append(v, s)
 			}
 		} else {
 			l := len(v)
 			if l > 0 {
-				v[l-1] += " " + item
+				v[l-1] += " " + s
 				invert = !invert
 			} else {
-				appendToLast = item
+				appendToLast = s
 			}
 		}
 	}
@@ -469,10 +473,17 @@ func ParsePerson(str string, invert bool) Person {
 			person.LastName = v[0]
 		}
 	} else if len(v) == 3 {
-		person.FirstName = v[1]
-		person.MiddleName = v[2]
-		person.LastName = v[0]
+		if invert {
+			person.FirstName = v[0]
+			person.MiddleName = v[1]
+			person.LastName = v[2]
+		} else {
+			person.FirstName = v[1]
+			person.MiddleName = v[2]
+			person.LastName = v[0]
+		}
 	}
+	/* fmt.Printf("person: %v\n", person) */
 	return person
 }
 
@@ -691,10 +702,13 @@ func VisitGoodreads(link string) Book {
 	})
 
 	c.OnHTML("#bookAuthors", func(e *colly.HTMLElement) {
-		e.ForEach("a[href].authorName", func(i int, a *colly.HTMLElement) {
-			str := strings.TrimSpace(a.Text)
-			/* fmt.Printf("author: %s\n", a.Text) */
-			book.Authors = append(book.Authors, ParsePerson(str, true))
+		e.ForEach("div.authorName__container", func(i int, d *colly.HTMLElement) {
+			if !strings.Contains(d.Text, "(Foreword by)") {
+				str := strings.TrimSpace(d.ChildText("a.authorName"))
+				if str != "" {
+					book.Authors = append(book.Authors, ParsePerson(str, true))
+				}
+			}
 		})
 	})
 
