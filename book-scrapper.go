@@ -2,12 +2,11 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
+	"context"
 	"fmt"
 	"log"
 	"net/url"
 	"os"
-	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
@@ -18,6 +17,10 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
+	"google.golang.org/api/customsearch/v1"
+
+	/* 	"google.golang.org/api/googleapi" */
+	"google.golang.org/api/option"
 )
 
 var translator TagTranslator
@@ -124,7 +127,7 @@ func PrintMap(w *bufio.Writer, title string, lst map[string]string) {
 		return
 	}
 
-	_, err := fmt.Fprintf(w, title)
+	_, err := fmt.Fprint(w, title)
 	check(err)
 
 	text := ""
@@ -151,7 +154,7 @@ func PrintList(w *bufio.Writer, title string, lst []string) {
 		return
 	}
 
-	_, err := fmt.Fprintf(w, title)
+	_, err := fmt.Fprint(w, title)
 	check(err)
 
 	text := ""
@@ -173,7 +176,7 @@ func PrintPersonsList(w *bufio.Writer, title string, lst []Person) {
 		return
 	}
 
-	_, err := fmt.Fprintf(w, title)
+	_, err := fmt.Fprint(w, title)
 	check(err)
 
 	text := ""
@@ -610,7 +613,6 @@ func VisitLivelib(link string) Book {
 	c.OnHTML("h2.bc-author", func(e *colly.HTMLElement) {
 		e.ForEach("a[href].bc-author__link", func(i int, a *colly.HTMLElement) {
 			str := strings.TrimSpace(a.Text)
-			/* fmt.Printf("author: %v\n", a.Text) */
 			book.Authors = append(book.Authors, ParsePerson(str, true))
 		})
 	})
@@ -620,12 +622,8 @@ func VisitLivelib(link string) Book {
 		book.PosterUrl, _ = url.QueryUnescape(link)
 	})
 
-	c.OnHTML("table.bc-edition tr td", func(e *colly.HTMLElement) {
-		/* 		fmt.Printf("db8   : %s\n", e.Text)
-		   		fmt.Printf("db8 dt: %s\n", e.ChildText("dt")) */
-		if e.Attr("itemprop") == "publisher" {
-			book.Publisher = strings.TrimSpace(e.Text)
-		}
+	c.OnHTML("a.bc-edition__link", func(e *colly.HTMLElement) {
+		book.Publisher = strings.TrimSpace(e.Text)
 	})
 
 	c.OnHTML(".bc-genre", func(e *colly.HTMLElement) {
@@ -640,16 +638,15 @@ func VisitLivelib(link string) Book {
 				book.AppendGenre(RemoveNumPrefix(a.Text))
 			})
 		}
-		/* 		else if strings.Contains(e.Text, "Теги:") {
-			e.ForEach("a[href]", func(i int, a *colly.HTMLElement) {
-				book.AppendGenre(a.Text)
-			})
-		} */
 	})
 
-	c.OnHTML(".bc-info div p span", func(e *colly.HTMLElement) {
-		if e.Attr("itemprop") == "isbn" {
-			book.Isbn = strings.TrimSpace(e.Text)
+	c.OnHTML(".bc-info div p", func(e *colly.HTMLElement) {
+		if strings.Contains(e.Text, "ISBN: ") {
+			r, _ := regexp.Compile("ISBN: (.*)")
+			m := r.FindSubmatch([]byte(e.Text))
+			if m != nil {
+				book.Isbn = strings.TrimSpace(string(m[1]))
+			}
 		}
 	})
 
@@ -663,10 +660,8 @@ func VisitLivelib(link string) Book {
 		}
 	})
 
-	c.OnHTML("#lenta-card__text-edition-escaped p", func(e *colly.HTMLElement) {
-		if e.Attr("itemprop") == "description" {
-			book.Summary = e.Text
-		}
+	c.OnHTML("div#lenta-card__text-edition-full", func(e *colly.HTMLElement) {
+		book.Summary = e.Text
 	})
 
 	/* 	c.OnResponse(func(res *colly.Response) {
@@ -695,19 +690,17 @@ func VisitGoodreads(link string) Book {
 		RandomDelay: 1 * time.Second,
 	})
 
-	c.OnHTML("#bookTitle", func(e *colly.HTMLElement) {
+	c.OnHTML("div.BookPageTitleSection__title", func(e *colly.HTMLElement) {
 		if len(book.Name) == 0 {
 			book.Name = strings.TrimSpace(e.Text)
 		}
 	})
 
-	c.OnHTML("#bookAuthors", func(e *colly.HTMLElement) {
-		e.ForEach("div.authorName__container", func(i int, d *colly.HTMLElement) {
-			if !strings.Contains(d.Text, "(Foreword by)") {
-				str := strings.TrimSpace(d.ChildText("a.authorName"))
-				if str != "" {
-					book.Authors = append(book.Authors, ParsePerson(str, true))
-				}
+	c.OnHTML("div.BookPageMetadataSection__contributor", func(e *colly.HTMLElement) {
+		e.ForEach(".ContributorLink__name", func(i int, d *colly.HTMLElement) {
+			str := strings.TrimSpace(d.Text)
+			if str != "" {
+				book.Authors = append(book.Authors, ParsePerson(str, true))
 			}
 		})
 	})
@@ -717,7 +710,7 @@ func VisitGoodreads(link string) Book {
 		book.PosterUrl, _ = url.QueryUnescape(link)
 	})
 
-	c.OnHTML("#details div.row", func(e *colly.HTMLElement) {
+	c.OnHTML(".EditionDetails", func(e *colly.HTMLElement) {
 		if strings.Contains(e.Text, "Published") {
 			r, _ := regexp.Compile("[0-9][0-9][0-9][0-9]")
 			s := r.FindString(e.Text)
@@ -759,7 +752,9 @@ func VisitGoodreads(link string) Book {
 	return book
 }
 
-func VisitLitres(book *Book, link string) {
+func VisitLitres(link string) Book {
+
+	book := NewBook()
 
 	c := colly.NewCollector(
 		colly.AllowedDomains("www.litres.ru"),
@@ -829,91 +824,79 @@ func VisitLitres(book *Book, link string) {
 		book.LitresUrl = link
 		c.Visit(book.LitresUrl)
 	}
+
+	book.InitFileName()
+	return book
 }
 
-func SearchGoogle(query string, site string) string {
-	s := "-w " + site
-	out, err := exec.Command("googler", "-n 1", "--np", "--json", s, query).Output()
+// Search google for a given query on a given site
+func SearchGoogle(query string, site string, n int64) []string {
+
+	ctx := context.Background()
+	apiKey := "AIzaSyA7Tc319mUHNiqj5JnBFbDIddTHrM-x1vk"
+	cx := "5190c921a536d4411"
+
+	svc, err := customsearch.NewService(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
-		log.Fatal(err)
-		panic(err)
+		log.Fatalf("Failed to create custom search service: %v", err)
 	}
 
-	var dat []map[string]interface{}
-
-	if err := json.Unmarshal(out, &dat); err != nil {
-		panic(err)
-	}
-
-	var str string
-	for _, d := range dat {
-		str, _ = url.QueryUnescape(d["url"].(string))
-	}
-	return str
-}
-
-func SearchGoogleN(query string, n string, site string) []string {
-	cmd := exec.Command("googler", "-n", n, "-w", site, "--np", "--json", query)
-	//fmt.Printf("cmd: %s\n", cmd.String())
-	out, err := cmd.Output()
+	resp, err := svc.Cse.List().Cx(cx).Num(n).SiteSearch(site).ExactTerms(query).Do()
 	if err != nil {
-		log.Fatal(err)
-		panic(err)
+		log.Fatalf("Failed to search: %v", err)
 	}
 
-	var dat []map[string]interface{}
-
-	if err := json.Unmarshal(out, &dat); err != nil {
-		panic(err)
+	if len(resp.Items) == 0 {
+		time.Sleep(2 * time.Second)
+		resp, err = svc.Cse.List().Cx(cx).Num(n).SiteSearch(site).Q(query).Do()
+		if err != nil {
+			log.Fatalf("Failed to search: %v", err)
+		}
 	}
 
 	var urls []string
-	for _, d := range dat {
-		str, _ := url.QueryUnescape(d["url"].(string))
-		urls = append(urls, str)
+	for _, item := range resp.Items {
+		urls = append(urls, item.Link)
 	}
 	return urls
 }
 
-func SearchGoogle10(query string, site string) []string {
-	return SearchGoogleN(query, "10", site)
-}
-
-func SearchGoogle5(query string, site string) []string {
-	return SearchGoogleN(query, "5", site)
-}
-
 func ScrapeLabirint(query string) []Book {
-	//fmt.Printf("Labirint: %v\n", labirint)
 	var books []Book
-	for _, w := range SearchGoogle5(query, "labirint.ru/books") {
+	for _, w := range SearchGoogle(query, "labirint.ru/books", 5) {
 		fmt.Printf("%v\n", w)
-		if strings.HasPrefix(w, "https://www.labirint.ru/books/") {
-			books = append(books, VisitLabirint(w))
-		}
+		books = append(books, VisitLabirint(w))
 	}
 	return books
 }
 
 func ScrapeLivelib(query string) []Book {
 	var books []Book
-	for _, w := range SearchGoogle5(query, "livelib.ru/book") {
+	for _, w := range SearchGoogle(query, "livelib.ru/book", 5) {
 		fmt.Printf("%v\n", w)
-		if strings.HasPrefix(w, "https://www.livelib.ru/book/") {
-			books = append(books, VisitLivelib(w))
-		}
+		books = append(books, VisitLivelib(w))
+	}
+	return books
+}
+
+func ScrapeLitres(query string) []Book {
+	var books []Book
+	for _, w := range SearchGoogle(query, "litres.ru", 5) {
+		fmt.Printf("%v\n", w)
+		books = append(books, VisitLitres(w))
 	}
 	return books
 }
 
 func ScrapeGoodreads(query string) []Book {
 	var books []Book
-	for _, w := range SearchGoogle10(query, "goodreads.com") {
+	for _, w := range SearchGoogle(query, "goodreads.com/book", 5) {
 		fmt.Printf("%v\n", w)
-		if strings.HasPrefix(w, "https://www.goodreads.com/book/") ||
-			strings.HasPrefix(w, "https://www.goodreads.com/en/book/") {
-			books = append(books, VisitGoodreads(w))
-		}
+		books = append(books, VisitGoodreads(w))
+	}
+	for _, w := range SearchGoogle(query, "goodreads.com/en/book", 5) {
+		fmt.Printf("%v\n", w)
+		books = append(books, VisitGoodreads(w))
 	}
 	return books
 }
@@ -934,7 +917,7 @@ func SelectBook(books []Book) *Book {
 				u = book.GoodreadsUrl
 			}
 			fmt.Printf("%d. \"%s\" [%s] publisher: %s\n", i+1, book.FileName, book.Year, book.Publisher)
-			fmt.Printf("    %s\n", u)
+			fmt.Printf("        %s\n", u)
 		}
 		text, _ := reader.ReadString('\n')
 		text = strings.TrimSuffix(text, "\n")
@@ -956,20 +939,35 @@ func main() {
 	var book *Book
 	translator.Load()
 
+	VisitLivelib("https://www.livelib.ru/book/1000551620-grabezh-po-zakonu-frederik-bastia")
+
+	// check if there is a command line argument
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: book <query>")
+		os.Exit(1)
+	}
+
 	query := os.Args[1]
+	fmt.Printf("query: %s\n", query)
+
 	if IsEnglish(query) {
 		book = SelectBook(ScrapeGoodreads(query))
 	} else {
 		book = SelectBook(ScrapeLabirint(query))
 		if book == nil {
+			time.Sleep(2 * time.Second)
 			book = SelectBook(ScrapeLivelib(query))
 		}
 
-		if book != nil {
-			time.Sleep(1 * time.Second)
-			litres := SearchGoogle(query, "litres.ru")
-			VisitLitres(book, litres)
-			fmt.Printf("Litres: %s\n", book.LitresUrl)
+		if book == nil {
+			time.Sleep(2 * time.Second)
+			book = SelectBook(ScrapeLitres(query))
+
+			/* 			litres := SearchGoogle(query, "litres.ru", 1)
+			   			if len(litres) > 0 {
+			   				VisitLitres(book, litres[0])
+			   				fmt.Printf("Litres: %s\n", book.LitresUrl)
+			   			} */
 		}
 	}
 

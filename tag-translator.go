@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os/exec"
-	"strings"
+
+	/* 	"os/exec" */
+
+	"github.com/bregydoc/gtranslate"
 )
 
 /* var Translations = map[string]string{} */
@@ -39,21 +41,19 @@ func (translator *TagTranslator) Translate(query string) string {
 		return trans
 	}
 
-	out, err := exec.Command("translate", "ru", "en", query).Output()
+	translated, err := gtranslate.TranslateWithParams(
+		query,
+		gtranslate.TranslationParams{
+			From: "ru",
+			To:   "en",
+		},
+	)
 	if err != nil {
 		log.Fatal(err)
 		panic(err)
 	}
 
-	fmt.Printf("%s\n", string(out))
-
-	vec := strings.Split(string(out), "\n")
-	for _, line := range vec {
-		if strings.HasPrefix(line, "en: ") {
-			trans = strings.TrimPrefix(line, "en: ")
-			translator.data[query] = trans
-			return trans
-		}
-	}
-	return ""
+	fmt.Printf("%s\n", string(translated))
+	translator.data[query] = translated
+	return translated
 }
